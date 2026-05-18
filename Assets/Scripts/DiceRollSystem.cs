@@ -44,6 +44,39 @@ public class DiceRollSystem : MonoBehaviour
     {
         CleanupHierarchy();
         RefreshReferences();
+        StartCoroutine(WarmupRoutine());
+    }
+
+    private IEnumerator WarmupRoutine()
+    {
+        Debug.Log("[DiceRollSystem] Starting Warmup...");
+        List<GameObject> tempObjects = new List<GameObject>();
+
+        // Spawn all prefabs to force mesh/material/shader loading
+        foreach (var prefab in dicePrefabs)
+        {
+            if (prefab == null) continue;
+            // Spawn far below the world
+            GameObject temp = Instantiate(prefab, new Vector3(0, -500, 0), Quaternion.identity);
+            temp.SetActive(true); // Must be active to warm up
+            tempObjects.Add(temp);
+            yield return null; 
+        }
+
+        // Wait a few frames for engine to process initial physics/render calls
+        yield return new WaitForSeconds(0.5f);
+
+        // Cleanup
+        foreach (var obj in tempObjects) Destroy(obj);
+        
+        // Final settle time to allow GC/Cleanup to finish before screen fades
+        yield return new WaitForSeconds(0.5f);
+
+        Debug.Log("[DiceRollSystem] Warmup and Settle Complete.");
+        if (LoadingScreenUI.Instance != null)
+        {
+            LoadingScreenUI.Instance.OnSystemInitialized();
+        }
     }
 
     private void CleanupHierarchy()

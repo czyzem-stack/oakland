@@ -6,6 +6,7 @@ public class TurnIndicatorUI : MonoBehaviour
     public Text turnText;
     public GameObject playerIndicator;
     public GameObject enemyIndicator;
+    public GameObject visualsContainer;
 
     private void Update()
     {
@@ -13,9 +14,10 @@ public class TurnIndicatorUI : MonoBehaviour
 
         if (CombatSystem.Instance.isInCombat)
         {
+            if (visualsContainer != null) visualsContainer.SetActive(true);
+            
             if (turnText != null)
             {
-                turnText.gameObject.SetActive(true);
                 turnText.text = CombatSystem.Instance.isPlayerTurn ? "STEVE'S TURN" : "ORC'S TURN";
                 turnText.color = CombatSystem.Instance.isPlayerTurn ? Color.green : Color.red;
             }
@@ -25,9 +27,7 @@ public class TurnIndicatorUI : MonoBehaviour
         }
         else
         {
-            if (turnText != null) turnText.gameObject.SetActive(false);
-            if (playerIndicator != null) playerIndicator.SetActive(false);
-            if (enemyIndicator != null) enemyIndicator.SetActive(false);
+            if (visualsContainer != null) visualsContainer.SetActive(false);
         }
     }
 }

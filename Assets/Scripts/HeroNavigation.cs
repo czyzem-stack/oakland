@@ -15,9 +15,10 @@ public class HeroNavigation : MonoBehaviour
     private Animator animator;
     private List<Transform> availablePOIs = new List<Transform>();
     private Transform currentTarget;
+    private CharacterStats stats;
     
     [Header("Status")]
-    public float remainingMeters = 0f;
+public float remainingMeters = 0f;
     public bool isMoving = false;
     private Vector3 lastPosition;
     private float totalDistanceForCurrentMove = 0f;
@@ -26,6 +27,7 @@ public class HeroNavigation : MonoBehaviour
     {
         if (agent == null) agent = GetComponent<NavMeshAgent>();
         if (animator == null) animator = GetComponent<Animator>();
+        if (stats == null) stats = GetComponent<CharacterStats>();
     }
 
     void Start()
@@ -163,6 +165,39 @@ public class HeroNavigation : MonoBehaviour
         CharacterStats enemyStats = currentTarget.GetComponentInChildren<CharacterStats>();
         if (enemyStats != null && !enemyStats.isDead)
         {
+            // IMPACT DAMAGE: If we have moves left, we "charge" into them
+            if (remainingMeters > 0.1f)
+            {
+                // Damage = remaining meters * (current HP / 10)
+                // Proportional to speed (meters) and fitness (remaining HP)
+                int impactDamage = Mathf.CeilToInt(remainingMeters * (stats.currentHP / 10f));
+                enemyStats.TakeDamage(impactDamage);
+                
+                Debug.Log($"[HeroNavigation] IMPACT! Dealt {impactDamage} damage to {enemyStats.name}.");
+                
+                if (CombatSystem.Instance != null)
+                {
+                    CombatSystem.Instance.SpawnDamageText(enemyStats.transform.position + Vector3.up * 2f, $"IMPACT! -{impactDamage}", Color.yellow);
+                    Camera.main.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f);
+                }
+
+                if (animator != null) animator.SetTrigger("Attack");
+                
+                remainingMeters = 0; // Move pool consumed by the impact
+
+                if (enemyStats.isDead)
+                {
+                    Animator enemyAnim = enemyStats.GetComponent<Animator>();
+                    if (enemyAnim != null) enemyAnim.SetTrigger("Die");
+                    GameObject.Destroy(enemyStats.gameObject, 2f);
+                    StopMoving("Enemy Defeated by Impact");
+                    
+                    // Proceed to next POI if any logic allows, but for now just stop
+                    currentTarget = null;
+                    return;
+                }
+            }
+
             StopMoving("Enemy Encountered");
             CombatSystem.Instance.StartCombat(enemyStats);
             return;

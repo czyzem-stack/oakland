@@ -29,6 +29,14 @@ public class OrcPatrol : MonoBehaviour
         animator = GetComponent<Animator>();
         startPosition = transform.position;
         
+        // Stagger startup to prevent frame drops
+        StartCoroutine(DelayedStart());
+    }
+
+    private IEnumerator DelayedStart()
+    {
+        // Wait between 0.1 and 1.5 seconds
+        yield return new WaitForSeconds(Random.Range(0.1f, 1.5f));
         StartCoroutine(PatrolRoutine());
     }
 

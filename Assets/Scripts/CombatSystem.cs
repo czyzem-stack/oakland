@@ -30,13 +30,13 @@ public class CombatSystem : MonoBehaviour
 
     public void StartCombat(CharacterStats enemy)
     {
-        if (isInCombat) return;
+        if (isInCombat || enemy == null || enemy.isDead) return;
 
         currentEnemyStats = enemy;
         isInCombat = true;
         isPlayerTurn = true;
         Debug.Log("[CombatSystem] Combat Started against " + enemy.name);
-        
+
         // Disable NavMeshAgent to allow manual positioning
         var agent = playerStats.GetComponent<UnityEngine.AI.NavMeshAgent>();
         if (agent != null) agent.enabled = false;
@@ -198,10 +198,10 @@ public class CombatSystem : MonoBehaviour
         if (playerAnim != null) playerAnim.SetTrigger("GetHit");
     }
 
-    private void SpawnDamageText(Vector3 position, string text, Color color)
+    public void SpawnDamageText(Vector3 position, string text, Color color)
     {
         GameObject canvasGo = new GameObject("DamageTextCanvas");
-        canvasGo.transform.position = position + Vector3.up * 0.5f; // Initial offset
+canvasGo.transform.position = position + Vector3.up * 0.5f; // Initial offset
         Canvas canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         canvasGo.AddComponent<CanvasScaler>();
