@@ -84,6 +84,12 @@ public class HeroNavigation : MonoBehaviour
 
     public void OnDiceRolled(int totalValue)
     {
+        if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
+        {
+            CombatSystem.Instance.OnPlayerRoll(totalValue);
+            return;
+        }
+
         EnsureComponents();
         float gainedDistance = totalValue * metersPerDicePoint;
         remainingMeters += gainedDistance;
@@ -136,9 +142,32 @@ public class HeroNavigation : MonoBehaviour
         remainingMeters = Mathf.Max(0, remainingMeters);
     }
 
+    public void ResumeAfterCombat()
+    {
+        Debug.Log("[HeroNavigation] Resuming movement after combat.");
+        if (remainingMeters > 0.1f)
+        {
+            StartMoving();
+        }
+        else
+        {
+            StopMoving("Post-Combat Idle");
+        }
+    }
+
     private void OnReachedPOI()
     {
         Debug.Log($"[HeroNavigation] Reached target: {currentTarget.name}. Remaining pool: {remainingMeters:F2}m.");
+        
+        // Check for Enemy at POI
+        CharacterStats enemyStats = currentTarget.GetComponentInChildren<CharacterStats>();
+        if (enemyStats != null)
+        {
+            StopMoving("Enemy Encountered");
+            CombatSystem.Instance.StartCombat(enemyStats);
+            return;
+        }
+
         currentTarget = null;
         SelectNextPOI();
 

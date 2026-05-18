@@ -1,0 +1,41 @@
+using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
+
+public class FloatingCombatText : MonoBehaviour
+{
+    public Text text;
+    public float duration = 1.5f;
+    public Vector3 driftDirection = Vector3.up;
+    public float driftSpeed = 1f;
+
+    public void Setup(string content, Color color)
+    {
+        text.text = content;
+        text.color = color;
+        StartCoroutine(FadeRoutine());
+    }
+
+    private IEnumerator FadeRoutine()
+    {
+        float elapsed = 0;
+        Vector3 startPos = transform.position;
+        
+        CanvasGroup group = GetComponent<CanvasGroup>();
+        if (group == null) group = gameObject.AddComponent<CanvasGroup>();
+
+        while (elapsed < duration)
+        {
+            if (group == null) yield break;
+            
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            
+            transform.position = startPos + driftDirection * driftSpeed * t;
+            group.alpha = 1 - t;
+            
+            yield return null;
+        }
+        Destroy(gameObject);
+    }
+}
