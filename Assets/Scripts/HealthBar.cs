@@ -16,27 +16,30 @@ public class HealthBar : MonoBehaviour
     {
         if (stats == null || fillImage == null) return;
 
-        bool isPlayer = false;
-        if (CombatSystem.Instance != null && CombatSystem.Instance.playerStats == stats)
-        {
-            isPlayer = true;
-        }
+        bool isPlayer = (CombatSystem.Instance != null && CombatSystem.Instance.playerStats == stats);
 
-        // Enemy-specific visibility logic
+        // Visibility logic
         bool shouldBeVisible = true;
         if (!isPlayer)
         {
             shouldBeVisible = false;
-            if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
+            
+            // 1. Visible if this is the active enemy in combat
+            if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat && CombatSystem.Instance.currentEnemyStats == stats)
             {
-                if (CombatSystem.Instance.currentEnemyStats == stats)
-                {
-                    shouldBeVisible = true;
-                }
+                shouldBeVisible = true;
+            }
+            // 2. Visible if damaged (covers Impact damage before combat formally starts)
+            else if (stats.currentHP < stats.MaxHP && stats.currentHP > 0)
+            {
+                shouldBeVisible = true;
             }
         }
 
-        // Toggle visibility using cached reference
+        // Ensure we have the canvas reference
+        if (cachedCanvas == null) cachedCanvas = GetComponentInParent<Canvas>();
+
+        // Toggle visibility
         if (cachedCanvas != null && cachedCanvas.enabled != shouldBeVisible)
         {
             cachedCanvas.enabled = shouldBeVisible;
@@ -45,7 +48,6 @@ public class HealthBar : MonoBehaviour
         if (!shouldBeVisible) return;
 
         float fill = stats.MaxHP > 0 ? stats.currentHP / (float)stats.MaxHP : 0;
-// Use localScale instead of fillAmount to allow solid color without sprite
         fillImage.transform.localScale = new Vector3(fill, 1, 1);
     }
 }

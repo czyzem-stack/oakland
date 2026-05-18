@@ -184,127 +184,118 @@ public class DiceRollSystem : MonoBehaviour
         Debug.Log("[DiceRollSystem] RollRoutine started.");
         isRolling = true;
 
-        // Give the animation a moment to reach the 'release' point
-        yield return new WaitForSeconds(0.45f);
-
-        if (resultText != null) 
-    {
-            resultText.text = ""; 
-            resultText.gameObject.SetActive(false);
-        }
-
-        // 1. Mark old dice for immediate destruction or let them fade out naturally
-        // We'll let old ones fade out and clear the list for new ones
-        activeDice.Clear();
-        activeDiceRBs.Clear();
-
-        GameObject prefab = GetPrefabForType(diceType);
-    if (prefab == null)
+        try
         {
-            Debug.LogError("[DiceRollSystem] No prefab found for " + diceType);
-            isRolling = false;
-            yield break;
-        }
+            // Give the animation a moment to reach the 'release' point
+            yield return new WaitForSeconds(0.45f);
 
-        // 2. Spawn in World Space
-        if (worldDiceContainer == null)
-        {
-            worldDiceContainer = GameObject.Find("WorldDiceContainer");
-            if (worldDiceContainer == null) worldDiceContainer = new GameObject("WorldDiceContainer");
-        }
+            if (resultText != null) 
+            {
+                resultText.text = ""; 
+                resultText.gameObject.SetActive(false);
+            }
 
-        for (int i = 0; i < amount; i++)
-        {
-            Vector3 spawnPos = transform.position + spawnOffset + Random.insideUnitSphere * 0.1f;
-            // Parent to worldDiceContainer so they DON'T move with Steve
-            GameObject die = Instantiate(prefab, spawnPos, Random.rotation, worldDiceContainer.transform); 
-            die.transform.localScale = Vector3.one * scale;
-            activeDice.Add(die);
+            // 1. Mark old dice for immediate destruction or let them fade out naturally
+            activeDice.Clear();
+            activeDiceRBs.Clear();
+
+            GameObject prefab = GetPrefabForType(diceType);
+            if (prefab == null)
+            {
+                Debug.LogError("[DiceRollSystem] No prefab found for " + diceType);
+                yield break;
+            }
+
+            // 2. Spawn in World Space
+            if (worldDiceContainer == null)
+            {
+                worldDiceContainer = GameObject.Find("WorldDiceContainer");
+                if (worldDiceContainer == null) worldDiceContainer = new GameObject("WorldDiceContainer");
+            }
+
+            for (int i = 0; i < amount; i++)
+            {
+                Vector3 spawnPos = transform.position + spawnOffset + Random.insideUnitSphere * 0.1f;
+                GameObject die = Instantiate(prefab, spawnPos, Random.rotation, worldDiceContainer.transform); 
+                die.transform.localScale = Vector3.one * scale;
+                activeDice.Add(die);
+                
+                if (diceMaterial != null)
+                {
+                    var renderers = die.GetComponentsInChildren<MeshRenderer>();
+                    foreach (var r in renderers) r.sharedMaterial = diceMaterial;
+                }
+
+                Rigidbody rb = die.GetComponent<Rigidbody>();
+                if (rb == null) rb = die.AddComponent<Rigidbody>();
+                activeDiceRBs.Add(rb);
+
+                rb.mass = 1.0f;
+                rb.linearDamping = 1.0f;
+                rb.angularDamping = 1.0f;
+
+                rb.AddForce((Vector3.up + Random.insideUnitSphere * 0.1f) * popForce, ForceMode.Impulse);
+                rb.AddTorque(Random.insideUnitSphere * torqueForce, ForceMode.Impulse);
+            }
+
+            // 3. Wait for dice to settle
+            yield return new WaitForSeconds(0.5f);
             
-            if (diceMaterial != null)
+            float timer = 0;
+            while (timer < 1.5f)
             {
-                var renderers = die.GetComponentsInChildren<MeshRenderer>();
-                foreach (var r in renderers) r.sharedMaterial = diceMaterial;
+                bool stillMoving = false;
+                foreach (var rb in activeDiceRBs)
+                {
+                    if (rb != null && rb.linearVelocity.magnitude > 0.2f)
+                    {
+                        stillMoving = true;
+                        break;
+                    }
+                }
+                if (!stillMoving) break;
+                timer += Time.deltaTime;
+                yield return null;
             }
 
-            Rigidbody rb = die.GetComponent<Rigidbody>();
-            if (rb == null) rb = die.AddComponent<Rigidbody>();
-    activeDiceRBs.Add(rb);
-
-            Debug.Log($"[DiceRollSystem] Spawning die {i} at {spawnPos} in world space.");
-    rb.mass = 1.0f;
-            rb.linearDamping = 1.0f;
-            rb.angularDamping = 1.0f;
-
-            rb.AddForce((Vector3.up + Random.insideUnitSphere * 0.1f) * popForce, ForceMode.Impulse);
-            rb.AddTorque(Random.insideUnitSphere * torqueForce, ForceMode.Impulse);
-        }
-
-        // 3. Wait
-        yield return new WaitForSeconds(0.5f);
-        
-        float timer = 0;
-        while (timer < 1.5f)
-        {
-            bool stillMoving = false;
-            foreach (var rb in activeDiceRBs)
+            // 4. Result calculation
+            int total = 0;
+            List<int> rollValues = new List<int>();
+            foreach (var die in activeDice)
             {
-                if (rb != null && rb.linearVelocity.magnitude > 0.2f)
+                if (die != null)
                 {
-                    stillMoving = true;
-                    break;
+                    DiceStats stats = die.GetComponent<DiceStats>() ?? die.GetComponentInChildren<DiceStats>();
+                    if (stats != null)
+                    {
+                        int val = stats.side;
+                        if (diceType == DiceType.D2) val = (val > 3) ? 2 : 1;
+                        rollValues.Add(val);
+                        total += val;
+                    }
                 }
             }
-            if (!stillMoving) break;
-    timer += Time.deltaTime;
-            yield return null;
-        }
 
-        // 4. Result
-        int total = 0;
-        List<int> rollValues = new List<int>();
-        foreach (var die in activeDice)
-        {
-            if (die != null)
+            bool isDoubles = rollValues.Count == 2 && rollValues[0] == rollValues[1];
+            if (isDoubles) total *= 2;
+
+            if (resultText != null) 
             {
-                DiceStats stats = die.GetComponent<DiceStats>() ?? die.GetComponentInChildren<DiceStats>();
-                if (stats != null)
-                {
-                    int val = stats.side;
-                    if (diceType == DiceType.D2) val = (val > 3) ? 2 : 1;
-                    rollValues.Add(val);
-                    total += val;
-                }
+                resultText.gameObject.SetActive(true);
+                resultText.text = isDoubles ? $"DOUBLE! {total}" : total.ToString();
+                StartCoroutine(AnimateFloatingText(resultText));
             }
-        }
 
-        // Check for doubles if 2 dice are rolled
-        bool isDoubles = rollValues.Count == 2 && rollValues[0] == rollValues[1];
-        if (isDoubles)
+            OnAnyDiceRolled?.Invoke(total);
+            if (heroNav != null) heroNav.OnDiceRolled(total);
+
+            StartCoroutine(FadeAndDestroyDice(new List<GameObject>(activeDice)));
+        }
+        finally
         {
-            total *= 2;
-            Debug.Log($"[DiceRollSystem] DOUBLES! Values: {rollValues[0]} and {rollValues[1]}. Total distance doubled to: {total}");
+            isRolling = false;
+            Debug.Log("[DiceRollSystem] RollRoutine finished.");
         }
-        else
-        {
-            Debug.Log($"[DiceRollSystem] Roll total: {total} (Values: {string.Join(", ", rollValues)})");
-        }
-
-        if (resultText != null) 
-        {
-            resultText.gameObject.SetActive(true);
-            resultText.text = isDoubles ? $"DOUBLE! {total}" : total.ToString();
-            StartCoroutine(AnimateFloatingText(resultText));
-        }
-
-        OnAnyDiceRolled?.Invoke(total);
-        if (heroNav != null) heroNav.OnDiceRolled(total);
-
-        // 5. Cleanup Coroutine for this specific batch
-        StartCoroutine(FadeAndDestroyDice(new List<GameObject>(activeDice)));
-
-        isRolling = false;
-        Debug.Log("[DiceRollSystem] RollRoutine finished.");
     }
 
     private IEnumerator FadeAndDestroyDice(List<GameObject> diceBatch)

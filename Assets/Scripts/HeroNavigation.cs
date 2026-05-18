@@ -8,9 +8,10 @@ public class HeroNavigation : MonoBehaviour
 {
     [Header("Navigation Settings")]
     public Transform poiRoot;
-    public float metersPerDicePoint = 1.0f;
+    public float metersPerDicePoint = 2.5f; // Increased from 1.0 for longer strides
     public float arrivalDistance = 1.0f;
     public GameObject coinPrefab;
+    public GameObject wormPrefab;
 
     private NavMeshAgent agent;
     private Animator animator;
@@ -26,10 +27,39 @@ public class HeroNavigation : MonoBehaviour
     private float metersTraveledSinceLastCoin = 0f;
     private bool spawnedCoinsForCurrentTarget = false;
 
+    private static int rollsCount = 0;
+
+    public void TrySpawnWorm(Vector3 position)
+    {
+        if (wormPrefab == null) return;
+        if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return;
+        if (GameSettings.Instance != null && !GameSettings.Instance.AreWormsUnlocked()) return;
+
+        if (Random.value < 0.1f)
+        {
+            Debug.Log("[HeroNavigation] WORM AMBUSH!");
+            GameObject worm = Instantiate(wormPrefab, position, Quaternion.identity);
+            worm.name = "WormMonster_" + System.Guid.NewGuid().ToString().Substring(0, 5);
+            CharacterStats wormStats = worm.GetComponent<CharacterStats>();
+            if (wormStats == null) wormStats = worm.AddComponent<CharacterStats>();
+            wormStats.brawn = 15; wormStats.grit = 10; wormStats.ResetStats();
+
+            PointOfInterest poi = Object.FindAnyObjectByType<PointOfInterest>();
+            if (poi != null && poi.healthCanvasPrefab != null)
+            {
+                GameObject canvas = Instantiate(poi.healthCanvasPrefab, worm.transform);
+                canvas.name = "HealthCanvas";
+                canvas.transform.localPosition = new Vector3(0, 2.2f, 0);
+                var bar = canvas.GetComponentInChildren<HealthBar>();
+                if (bar != null) bar.stats = wormStats;
+            }
+            CombatSystem.Instance.StartCombat(wormStats);
+        }
+    }
+
     public float DistanceToTarget
     {
-        get
-        {
+        get {
             if (currentTarget == null || agent == null || !agent.isOnNavMesh) return 0f;
             if (agent.pathPending) return Vector3.Distance(transform.position, currentTarget.position);
             return agent.remainingDistance;
@@ -48,17 +78,14 @@ public class HeroNavigation : MonoBehaviour
     void Start()
     {
         EnsureComponents();
-        
-        if (agent != null)
-        {
-            agent.autoBraking = true;
+        if (agent != null) 
+        { 
+            agent.autoBraking = false; // Disable braking for more consistent speed
             agent.stoppingDistance = arrivalDistance;
+            agent.acceleration = 20f; // High acceleration for 'buttery' feel
+            agent.angularSpeed = 600f; // Fast turning
         }
-        
-        if (poiRoot != null)
-        {
-            ResetPOIs();
-        }
+        if (poiRoot != null) ResetPOIs();
         lastPosition = transform.position;
     }
 
@@ -66,42 +93,31 @@ public class HeroNavigation : MonoBehaviour
     {
         if (agent == null) return;
 
-        // Skip animation syncing if in combat - let CombatSystem control it
+        if (agent.enabled && !agent.isOnNavMesh && Time.frameCount % 30 == 0)
+        {
+            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5.0f, NavMesh.AllAreas)) agent.Warp(hit.position);
+        }
+
+        // REMOVED: Periodic SetDestination was causing stutters/hiccups. 
+        // NavMesh carving from Bob's obstacle will be handled automatically by the agent's internal pathfinding.
+
         if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return;
 
         if (isMoving && remainingMeters > 0)
         {
-            // Calculate distance moved this frame
+            // Ensure agent is not stopped if we have distance to cover
+            if (agent.isStopped) agent.isStopped = false;
+
             float distMoved = Vector3.Distance(transform.position, lastPosition);
             remainingMeters -= distMoved;
             metersTraveledSinceLastCoin += distMoved;
-
-            if (metersTraveledSinceLastCoin >= 3f)
-            {
-                // We could reward directly, but the user wants spinning coins to collect
-                // Spawning them ahead of time is better.
-                metersTraveledSinceLastCoin = 0f;
-            }
-
             lastPosition = transform.position;
 
-            // Sync animation
             float speed = agent.velocity.magnitude / agent.speed;
             if (animator != null) animator.SafeSetFloat("Speed", speed);
 
-            // Check if arrived at POI
-            if (currentTarget != null && !agent.pathPending && agent.isOnNavMesh && agent.remainingDistance <= agent.stoppingDistance)
-            {
-                Debug.Log($"[HeroNavigation] Reached POI: {currentTarget.name}. Total meters remaining: {remainingMeters:F2}");
-                OnReachedPOI();
-            }
-            // Check if out of fuel
-            else if (remainingMeters <= 0)
-            {
-                float dist = agent.isOnNavMesh ? agent.remainingDistance : Vector3.Distance(transform.position, currentTarget.position);
-                Debug.Log($"[HeroNavigation] Stopped: Out of distance ({totalDistanceForCurrentMove:F2}m target met). Distance to POI: {dist:F2}m");
-                StopMoving("Out of distance");
-            }
+            if (currentTarget != null && !agent.pathPending && agent.isOnNavMesh && agent.remainingDistance <= agent.stoppingDistance) OnReachedPOI();
+            else if (remainingMeters <= 0) StopMoving("Out of distance");
         }
         else
         {
@@ -113,6 +129,7 @@ public class HeroNavigation : MonoBehaviour
 
     public void OnDiceRolled(int totalValue)
     {
+        rollsCount++;
         if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
         {
             CombatSystem.Instance.OnPlayerRoll(totalValue);
@@ -120,32 +137,20 @@ public class HeroNavigation : MonoBehaviour
         }
 
         EnsureComponents();
-
-        // Ensure agent is on NavMesh before calculating path
         if (agent != null && !agent.isOnNavMesh)
         {
-            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5.0f, NavMesh.AllAreas))
-            {
-                agent.Warp(hit.position);
-            }
+            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5.0f, NavMesh.AllAreas)) agent.Warp(hit.position);
         }
 
         float gainedDistance = totalValue * metersPerDicePoint;
         remainingMeters += gainedDistance;
         totalDistanceForCurrentMove = gainedDistance;
-        Debug.Log($"[HeroNavigation] Dice Result: {totalValue}. Gained {gainedDistance:F2}m. Total pool: {remainingMeters:F2}m.");
         
-        if (currentTarget == null)
-        {
-            SelectNextPOI();
-        }
+        if (currentTarget == null) SelectNextPOI();
 
         if (currentTarget != null && agent != null && agent.isOnNavMesh)
         {
-            if (!spawnedCoinsForCurrentTarget)
-            {
-                SpawnCoinsAlongPath();
-            }
+            if (!spawnedCoinsForCurrentTarget) SpawnCoinsAlongPath();
             StartMoving();
         }
     }
@@ -153,7 +158,6 @@ public class HeroNavigation : MonoBehaviour
     private void SpawnCoinsAlongPath()
     {
         if (coinPrefab == null || agent == null || currentTarget == null) return;
-
         spawnedCoinsForCurrentTarget = true;
         NavMeshPath path = new NavMeshPath();
         if (agent.CalculatePath(currentTarget.position, path))
@@ -161,30 +165,24 @@ public class HeroNavigation : MonoBehaviour
             float currentDist = 0;
             float coinInterval = 2.5f; 
             float nextCoinDist = 2.0f; 
-
+            int safetyBreak = 0;
             for (int i = 0; i < path.corners.Length - 1; i++)
             {
-                Vector3 start = path.corners[i];
-                Vector3 end = path.corners[i + 1];
+                Vector3 start = path.corners[i]; Vector3 end = path.corners[i + 1];
                 float segmentLen = Vector3.Distance(start, end);
-
                 while (currentDist + segmentLen >= nextCoinDist)
                 {
+                    if (safetyBreak++ > 1000) break;
                     float t = (nextCoinDist - currentDist) / segmentLen;
                     Vector3 spawnPos = Vector3.Lerp(start, end, t);
-                    
-                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, NavMesh.AllAreas))
-                    {
-                        spawnPos = hit.position + Vector3.up * 0.7f; 
-                    }
-
+                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, NavMesh.AllAreas)) spawnPos = hit.position + Vector3.up * 0.7f;
                     GameObject coin = Instantiate(coinPrefab, spawnPos, Quaternion.identity);
                     coin.transform.localScale = Vector3.one * 6f; 
                     if (coin.GetComponent<Coin>() == null) coin.AddComponent<Coin>();
-                    
                     nextCoinDist += coinInterval;
                 }
                 currentDist += segmentLen;
+                if (safetyBreak > 1000) break;
             }
         }
     }
@@ -192,17 +190,25 @@ public class HeroNavigation : MonoBehaviour
     private void SelectNextPOI()
     {
         spawnedCoinsForCurrentTarget = false;
-        if (availablePOIs.Count == 0)
-        {
-            ResetPOIs();
-        }
+        if (availablePOIs.Count == 0) ResetPOIs();
 
         if (availablePOIs.Count > 0)
         {
-            int index = Random.Range(0, availablePOIs.Count);
+            int index = -1;
+            if (rollsCount <= 3) // FTUE: Prioritize chests for first 3 rolls
+            {
+                for (int i = 0; i < availablePOIs.Count; i++)
+                {
+                    PointOfInterest poi = availablePOIs[i].GetComponent<PointOfInterest>();
+                    if (poi != null && poi.enemyType == EnemyType.TreasureChest) { index = i; break; }
+                }
+            }
+
+            if (index == -1) index = Random.Range(0, availablePOIs.Count);
+
             currentTarget = availablePOIs[index];
             availablePOIs.RemoveAt(index);
-            Debug.Log($"[HeroNavigation] Target POI: {currentTarget.name}");
+            Debug.Log($"[HeroNavigation] Target POI: {currentTarget.name} (FTUE Filter: {rollsCount <= 3})");
         }
     }
 
@@ -217,7 +223,7 @@ public class HeroNavigation : MonoBehaviour
         }
     }
 
-    private void StopMoving(string reason)
+    public void StopMoving(string reason)
     {
         Debug.Log($"[HeroNavigation] Stopping: {reason}");
         isMoving = false;
@@ -227,76 +233,42 @@ public class HeroNavigation : MonoBehaviour
 
     public void ResumeAfterCombat()
     {
-        Debug.Log("[HeroNavigation] Resuming movement after combat.");
-        if (remainingMeters > 0.1f)
-        {
-            StartMoving();
-        }
-        else
-        {
-            StopMoving("Post-Combat Idle");
-        }
+        if (remainingMeters > 0.1f) StartMoving();
+        else StopMoving("Post-Combat Idle");
     }
 
     private void OnReachedPOI()
     {
-        Debug.Log($"[HeroNavigation] Reached target: {currentTarget.name}. Remaining pool: {remainingMeters:F2}m.");
-        
-        // Check for Enemy at POI
         CharacterStats enemyStats = currentTarget.GetComponentInChildren<CharacterStats>();
         if (enemyStats != null && !enemyStats.isDead)
         {
-            // IMPACT DAMAGE: If we have moves left, we "charge" into them
             if (remainingMeters > 0.1f)
             {
-                // Damage = remaining meters * (current HP / 10)
-                // Proportional to speed (meters) and fitness (remaining HP)
                 int impactDamage = Mathf.CeilToInt(remainingMeters * (stats.currentHP / 10f));
                 enemyStats.TakeDamage(impactDamage);
-                
-                Debug.Log($"[HeroNavigation] IMPACT! Dealt {impactDamage} damage to {enemyStats.name}.");
-                
-                if (CombatSystem.Instance != null)
-                {
-                    CombatSystem.Instance.SpawnDamageText(enemyStats.transform.position + Vector3.up * 2f, $"IMPACT! -{impactDamage}", Color.yellow);
-                    Camera.main.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f);
-                }
-
+                if (CombatSystem.Instance != null) { CombatSystem.Instance.SpawnDamageText(enemyStats.transform.position + Vector3.up * 2f, $"IMPACT! -{impactDamage}", Color.yellow); Camera.main.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f); }
                 if (animator != null) animator.SafeSetTrigger("Attack");
-                
-                remainingMeters = 0; // Move pool consumed by the impact
+                remainingMeters = 0;
 
                 if (enemyStats.isDead)
                 {
                     if (animator != null) animator.SafeSetTrigger("Victory");
                     Animator enemyAnim = enemyStats.GetComponent<Animator>();
-                    
-                    bool isChest = enemyStats.name.Contains("TreasureChest") || enemyStats.name.Contains("Chest");
+                    bool isChest = enemyStats.name.Contains("Chest");
                     bool isDragon = enemyStats.name.Contains("DragonBob");
-
-                    if (enemyAnim != null)
-                    {
-                        if (isDragon) enemyAnim.CrossFade("Die", 0.1f);
-                        else enemyAnim.SafeSetTrigger("Die");
-                    }
-                    
+                    bool isOrc = enemyStats.name.Contains("Orc");
+                    if (isOrc) GameSettings.Instance?.RegisterOrcKill();
+                    if (enemyAnim != null) { if (isDragon) enemyAnim.CrossFade("Die", 0.1f); else enemyAnim.SafeSetTrigger("Die"); }
                     if (isChest) stats.AddGold(Random.Range(20, 51));
                     else if (isDragon) stats.AddGold(Random.Range(100, 201));
-                    else stats.AddGold(Random.Range(5, 11)); // Orcs/Mushrooms
-
+                    else stats.AddGold(Random.Range(5, 11));
                     GameObject.Destroy(enemyStats.gameObject, isDragon ? 3f : 2f);
                     StopMoving("Enemy Defeated by Impact");
-                    
-                    if (isChest && TreasureUpgradeUI.Instance != null)
-                    {
-                        TreasureUpgradeUI.Instance.ShowUpgrade(stats);
-                    }
-
+                    if (isChest && TreasureUpgradeUI.Instance != null) TreasureUpgradeUI.Instance.ShowUpgrade(stats);
                     currentTarget = null;
                     return;
                 }
-}
-
+            }
             StopMoving("Enemy Encountered");
             CombatSystem.Instance.StartCombat(enemyStats);
             return;
@@ -304,30 +276,14 @@ public class HeroNavigation : MonoBehaviour
 
         currentTarget = null;
         SelectNextPOI();
-
-        if (remainingMeters > 0.1f)
-        {
-            Debug.Log("[HeroNavigation] Distance remains, continuing to next POI.");
-            if (!spawnedCoinsForCurrentTarget)
-            {
-                SpawnCoinsAlongPath();
-            }
-            StartMoving();
-        }
-        else
-        {
-            StopMoving("Target Reached");
-        }
+        if (remainingMeters > 0.1f) { if (!spawnedCoinsForCurrentTarget) SpawnCoinsAlongPath(); StartMoving(); }
+        else StopMoving("Target Reached");
     }
 
     private void ResetPOIs()
     {
         availablePOIs.Clear();
-        foreach (Transform child in poiRoot)
-        {
-            availablePOIs.Add(child);
-        }
+        foreach (Transform child in poiRoot) availablePOIs.Add(child);
         Debug.Log($"POI List Reset. {availablePOIs.Count} points available.");
     }
 }
-

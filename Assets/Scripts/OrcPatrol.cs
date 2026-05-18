@@ -13,11 +13,17 @@ public class OrcPatrol : MonoBehaviour
     private Vector3 startPosition;
     private bool isPatrolling = true;
 
+    private DragonBob bob;
+    private float fearRadius = 15f;
+    private bool isFleeing = false;
+
     void Start()
     {
         agent = GetComponent<NavMeshAgent>();
         characterStats = GetComponent<CharacterStats>();
-if (agent == null)
+        bob = Object.FindAnyObjectByType<DragonBob>();
+
+        if (agent == null)
         {
             agent = gameObject.AddComponent<NavMeshAgent>();
         }
@@ -31,14 +37,6 @@ if (agent == null)
         animator = GetComponent<Animator>();
         startPosition = transform.position;
         
-        // Stagger startup to prevent frame drops
-        StartCoroutine(DelayedStart());
-    }
-
-    private IEnumerator DelayedStart()
-    {
-        // Wait between 0.1 and 1.5 seconds
-        yield return new WaitForSeconds(Random.Range(0.1f, 1.5f));
         StartCoroutine(PatrolRoutine());
     }
 
@@ -58,29 +56,64 @@ if (agent == null)
             if (isPatrolling)
             {
                 isPatrolling = false;
-                if (agent.isOnNavMesh) agent.isStopped = true;
-                // Don't set Speed to 0 here, let CombatSystem handle it
+                if (agent.enabled && agent.isOnNavMesh) agent.isStopped = true;
             }
-            return; // Exit Update - let CombatSystem control the orc
+            return; 
         }
-        else if (!isPatrolling && (CombatSystem.Instance == null || !CombatSystem.Instance.isInCombat))
+        
+        // Check for Bob
+        if (bob != null && !isFleeing)
         {
-            isPatrolling = true;
-            if (agent.isOnNavMesh) agent.isStopped = false;
+            float distToBob = Vector3.Distance(transform.position, bob.transform.position);
+            if (distToBob < fearRadius)
+            {
+                StartCoroutine(FleeFromBob());
+            }
         }
 
-        if (animator != null && agent != null && agent.enabled && isPatrolling)
+        if (!isPatrolling && !isFleeing && (CombatSystem.Instance == null || !CombatSystem.Instance.isInCombat))
+        {
+            isPatrolling = true;
+            if (agent.enabled && agent.isOnNavMesh) agent.isStopped = false;
+        }
+
+        if (animator != null && agent != null && agent.enabled && (isPatrolling || isFleeing))
         {
             float speed = agent.velocity.magnitude / agent.speed;
             animator.SafeSetFloat("Speed", speed);
         }
-}
+    }
+
+    private IEnumerator FleeFromBob()
+    {
+        isFleeing = true;
+        isPatrolling = false;
+        agent.speed = 3.5f; // Run!
+        
+        Debug.Log($"[OrcPatrol] {name} is fleeing from Bob!");
+
+        while (bob != null && Vector3.Distance(transform.position, bob.transform.position) < fearRadius + 5f)
+        {
+            Vector3 fleeDir = (transform.position - bob.transform.position).normalized;
+            Vector3 fleeTarget = transform.position + fleeDir * 10f;
+
+            if (NavMesh.SamplePosition(fleeTarget, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+            {
+                agent.SetDestination(hit.position);
+            }
+            yield return new WaitForSeconds(0.5f);
+        }
+
+        agent.speed = 1.0f;
+        isFleeing = false;
+        isPatrolling = true;
+    }
 
     private IEnumerator PatrolRoutine()
     {
         while (true)
         {
-            if (isPatrolling)
+            if (isPatrolling && !isFleeing)
             {
                 // Choose random point within radius
                 Vector2 randomPoint = Random.insideUnitCircle * patrolRadius;
@@ -91,13 +124,23 @@ if (agent == null)
                     agent.SetDestination(hit.position);
                 }
 
-                // Wait until reached
-                yield return new WaitUntil(() => agent.isOnNavMesh && !agent.pathPending && agent.remainingDistance <= agent.stoppingDistance);
+                // Wait until reached with safety timeout
+                float timeout = 5f;
+                while (timeout > 0)
+                {
+                    if (agent.isOnNavMesh && !agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
+                        break;
+                    
+                    if (!agent.isOnNavMesh) break;
+
+                    timeout -= Time.deltaTime;
+                    yield return null;
+                }
                 
                 // Idle pause
                 yield return new WaitForSeconds(waitTime);
             }
-            yield return null;
+            yield return new WaitForSeconds(0.1f);
         }
     }
 }

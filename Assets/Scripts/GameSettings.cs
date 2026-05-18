@@ -1,0 +1,34 @@
+using UnityEngine;
+
+public class GameSettings : MonoBehaviour
+{
+    public static GameSettings Instance;
+
+    [Header("Enemy Unlock Settings")]
+    public int orcsKilledToUnlockWorms = 2;
+    public int totalOrcsKilled = 0;
+
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+
+    public void RegisterOrcKill()
+    {
+        totalOrcsKilled++;
+        Debug.Log($"[GameSettings] Orc Killed! Total: {totalOrcsKilled}. Worms Unlocked: {AreWormsUnlocked()}");
+    }
+
+    public bool AreWormsUnlocked()
+    {
+        return totalOrcsKilled >= orcsKilledToUnlockWorms;
+    }
+}

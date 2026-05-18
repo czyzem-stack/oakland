@@ -48,10 +48,12 @@ public class Coin : MonoBehaviour
 
     public void Collect()
     {
-        CharacterStats stats = Object.FindAnyObjectByType<HeroNavigation>()?.GetComponent<CharacterStats>();
+        HeroNavigation hero = Object.FindAnyObjectByType<HeroNavigation>();
+        CharacterStats stats = hero?.GetComponent<CharacterStats>();
         if (stats != null)
         {
             stats.AddGold(1);
+            hero.TrySpawnWorm(transform.position);
         }
 
         // Play a sound if we had one, for now just destroy
