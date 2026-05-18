@@ -21,6 +21,8 @@ public class DiceRollSystem : MonoBehaviour
     public Material diceMaterial;
     public int amount = 2;
     public float scale = 0.5f;
+    public float diceLifetime = 3.0f; // Seconds dice stay before fading
+    public float fadeDuration = 1.0f; // Seconds to fade away
 
     [Header("Physics Settings")]
     public float popForce = 6.0f;
@@ -36,6 +38,7 @@ public class DiceRollSystem : MonoBehaviour
 
     private List<GameObject> activeDice = new List<GameObject>();
     private bool isRolling = false;
+    private GameObject worldDiceContainer;
 
     private void Start()
     {
@@ -45,12 +48,19 @@ public class DiceRollSystem : MonoBehaviour
 
     private void CleanupHierarchy()
     {
-        // Remove any leftover dice children
+        // Cleanup local children if any
         foreach (Transform child in transform)
         {
             Destroy(child.gameObject);
         }
         activeDice.Clear();
+
+        // Ensure we have a world container for dice to stay in place
+        if (worldDiceContainer == null)
+        {
+            worldDiceContainer = GameObject.Find("WorldDiceContainer");
+            if (worldDiceContainer == null) worldDiceContainer = new GameObject("WorldDiceContainer");
+        }
     }
 
     private void RefreshReferences()
@@ -97,8 +107,9 @@ public class DiceRollSystem : MonoBehaviour
             resultText.gameObject.SetActive(false);
         }
 
-        // 1. Cleanup
-        CleanupHierarchy();
+        // 1. Mark old dice for immediate destruction or let them fade out naturally
+        // We'll let old ones fade out and clear the list for new ones
+        activeDice.Clear();
 
         GameObject prefab = GetPrefabForType(diceType);
         if (prefab == null)
@@ -108,14 +119,15 @@ public class DiceRollSystem : MonoBehaviour
             yield break;
         }
 
-        // 2. Spawn
+        // 2. Spawn in World Space
         for (int i = 0; i < amount; i++)
         {
             Vector3 spawnPos = transform.position + spawnOffset + Random.insideUnitSphere * 0.1f;
-            GameObject die = Instantiate(prefab, spawnPos, Random.rotation, transform); // Added 'transform' as parent
+            // Parent to worldDiceContainer so they DON'T move with Steve
+            GameObject die = Instantiate(prefab, spawnPos, Random.rotation, worldDiceContainer.transform); 
             die.transform.localScale = Vector3.one * scale;
             activeDice.Add(die);
-            Debug.Log($"[DiceRollSystem] Spawning die {i} at {spawnPos} (Scale: {scale})");
+            Debug.Log($"[DiceRollSystem] Spawning die {i} at {spawnPos} in world space.");
 
             if (diceMaterial != null)
             {
@@ -178,8 +190,39 @@ public class DiceRollSystem : MonoBehaviour
 
         if (heroNav != null) heroNav.OnDiceRolled(total);
 
+        // 5. Cleanup Coroutine for this specific batch
+        StartCoroutine(FadeAndDestroyDice(new List<GameObject>(activeDice)));
+
         isRolling = false;
         Debug.Log("[DiceRollSystem] RollRoutine finished.");
+    }
+
+    private IEnumerator FadeAndDestroyDice(List<GameObject> diceBatch)
+    {
+        yield return new WaitForSeconds(diceLifetime);
+
+        float elapsed = 0;
+        while (elapsed < fadeDuration)
+        {
+            elapsed += Time.deltaTime;
+            float alpha = 1f - (elapsed / fadeDuration);
+
+            foreach (var die in diceBatch)
+            {
+                if (die == null) continue;
+                
+                // Shrink as a "fade" alternative since materials might not be transparent
+                die.transform.localScale = Vector3.one * scale * alpha;
+                
+                // If materials support transparency, we could fade them here, but shrinking is safer/snappier
+            }
+            yield return null;
+        }
+
+        foreach (var die in diceBatch)
+        {
+            if (die != null) Destroy(die);
+        }
     }
 
     private IEnumerator AnimateFloatingText(Text text)

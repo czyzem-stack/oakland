@@ -25,18 +25,28 @@ public class CameraFollow : MonoBehaviour
 
         ApplyPresets();
 
-        // Calculate rotation
-        Quaternion rotation = Quaternion.Euler(pitch, yaw, 0);
+        // Calculate rotation based on preset
+        Quaternion targetRotation;
+        if (preset == CameraPreset.GodOfWar)
+        {
+            // For GoW, follow the target's yaw but keep fixed pitch
+            targetRotation = Quaternion.Euler(pitch, target.eulerAngles.y + yaw, 0);
+        }
+        else
+        {
+            // For Diablo/Custom, use fixed world rotation
+            targetRotation = Quaternion.Euler(pitch, yaw, 0);
+        }
         
         // Calculate position based on rotation and distance
-        Vector3 offset = rotation * new Vector3(0, 0, -distance);
+        Vector3 offset = targetRotation * new Vector3(0, 0, -distance);
         Vector3 desiredPosition = target.position + offset;
         
         // Smoothly move the camera
         transform.position = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed);
         
         // Always look at the target
-        transform.LookAt(target.position + Vector3.up * 1.5f); // Look slightly above feet
+        transform.LookAt(target.position + Vector3.up * 1.5f); 
     }
 
     private void ApplyPresets()
