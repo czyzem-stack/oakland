@@ -1,9 +1,10 @@
 # Oakland — Game Architecture & Documentation
 
-**Current version:** `v0.0.007` (tag `v0.0.007`)  
+**Current version:** `v0.0.012` (tag `v0.0.012`)  
 **Main scene:** `Assets/Main.unity`  
 **Player:** Steve (RPG Tiny Hero PBR)  
-**Core loop:** Roll dice → spend mana → move on NavMesh → reach POIs → fight or loot → repeat
+**Boss:** Dragon Bob (flying dragon, optional POI)  
+**Core loop:** Roll dice → spend mana → move on NavMesh → collect coins → reach POIs → fight or loot → unlock worms → repeat
 
 This document explains how every major system works, with extra depth on the **God of War (GoW)** camera mode (often abbreviated “GoW” in code and conversation).
 
@@ -18,12 +19,14 @@ This document explains how every major system works, with extra depth on the **G
 5. [Dice & Movement](#5-dice--movement)
 6. [Stats, UI & Progression](#6-stats-ui--progression)
 7. [Enemies & Points of Interest](#7-enemies--points-of-interest)
-8. [Loading & Startup](#8-loading--startup)
-9. [Script Reference](#9-script-reference)
-10. [Scene Wiring Checklist](#10-scene-wiring-checklist)
-11. [Asset Packs](#11-asset-packs)
-12. [Versioning](#12-versioning)
-13. [Extension Guide](#13-extension-guide)
+8. [Dragon Bob (Boss)](#8-dragon-bob-boss)
+9. [Coins, Gold & Worms](#9-coins-gold--worms)
+10. [Loading & Startup](#10-loading--startup)
+11. [Script Reference](#11-script-reference)
+12. [Scene Wiring Checklist](#12-scene-wiring-checklist)
+13. [Asset Packs](#13-asset-packs)
+14. [Versioning](#14-versioning)
+15. [Extension Guide](#15-extension-guide)
 
 ---
 
@@ -34,16 +37,23 @@ Oakland is a **dice-driven exploration and combat** prototype built in Unity (UR
 - **Rolls dice** (costs 1 mana) to generate a number.
 - **Outside combat:** that number becomes **movement distance** in meters along NavMesh paths to random POIs.
 - **In combat:** that number becomes the **attack roll** added to melee damage (with crits on high rolls).
-- **Reaches POIs** that may contain orcs (patrolling), mushrooms (static), or treasure chests (static, offer stat upgrades).
+- **Reaches POIs** with orcs, mushrooms, treasure chests, worms (after unlock), or **Dragon Bob**.
+- **Collects coins** spawned along the NavMesh path; gold is shown in UI and granted from kills/chests.
+- **Dragon Bob** patrols POIs from the sky; can land, block NavMesh, and trigger boss combat.
 
-Systems communicate through a few **singletons** and direct component references:
+Systems communicate through **singletons**, **events**, and component references:
 
 | Singleton / Hub | Role |
 |-----------------|------|
 | `CombatSystem.Instance` | Turn-based combat state machine |
 | `LoadingScreenUI.Instance` | Boot loading overlay |
 | `TreasureUpgradeUI.Instance` | Chest reward picker |
+| `GameSettings.Instance` | Persistent progression (orc kill count → worm unlock) |
 | `Camera.main` + `CameraFollow` | All camera behavior |
+
+| Event | Publisher | Subscribers |
+|-------|-----------|-------------|
+| `DiceRollSystem.OnAnyDiceRolled` | After each roll resolves | `DragonBob` (flight AI, grace period) |
 
 ```mermaid
 flowchart TB
@@ -62,14 +72,25 @@ flowchart TB
     subgraph World
         POI[PointOfInterest]
         Orc[OrcPatrol]
+        Bob[DragonBob]
+        Coin[Coin pickups]
+    end
+
+    subgraph Meta
+        GS[GameSettings]
     end
 
     RollBtn --> Dice
     Dice -->|mana -1| Stats
     Dice -->|total| Nav
     Dice -->|total in combat| Combat
+    Dice -->|OnAnyDiceRolled| Bob
     Nav -->|reach POI| Combat
+    Nav -->|path| Coin
+    Coin -->|gold| Stats
     POI --> Orc
+    POI --> Bob
+    Combat -->|orc kill| GS
     CamBtn --> CameraFollow
     Combat --> CameraFollow
 ```
@@ -95,7 +116,8 @@ flowchart TB
 3. After 0.45s, spawn physics dice in **`WorldDiceContainer`** (world space, not parented to Steve).
 4. Read face values via third-party **`DiceStats`** (highest child transform = face up).
 5. Sum values; if **2 dice match**, total is **doubled** (“DOUBLES”).
-6. `HeroNavigation.OnDiceRolled(total)` adds `total × metersPerDicePoint` to `remainingMeters` and starts NavMesh movement toward a random POI.
+6. `DiceRollSystem` fires **`OnAnyDiceRolled(total)`** (Dragon Bob listens).
+7. `HeroNavigation.OnDiceRolled(total)` adds `total × metersPerDicePoint` (default **2.5**) to `remainingMeters`, spawns **coins along the NavMesh path**, and moves toward a POI (first 3 rolls prefer **treasure chests** for FTUE).
 
 ### POI arrival
 
@@ -301,7 +323,9 @@ Also used for mana spend/regen (`CharacterStats`) and impact damage (`HeroNaviga
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
-| `metersPerDicePoint` | 1.0 | Meters per pip on dice total |
+| `metersPerDicePoint` | 2.5 | Meters per pip on dice total |
+| `coinPrefab` | — | Spawned every ~2.5m along path to target |
+| `wormPrefab` | — | Rare ambush spawn on coin collect (after unlock) |
 | `poiRoot` | — | Parent of POI transforms |
 | `arrivalDistance` | 1.0 | NavMesh stop distance |
 
@@ -331,14 +355,18 @@ Also used for mana spend/regen (`CharacterStats`) and impact damage (`HeroNaviga
 
 **Crit:** `critThreshold` default 11 — roll ≥ threshold doubles damage.
 
+**Gold:** `coins` field; `AddGold(amount)` shows yellow floating text. Granted from coin pickups, impact kills, combat wins, and chest/dragon rewards.
+
 ### UI components
 
 | Script | Updates when |
 |--------|----------------|
 | `HealthBar` | Every frame; enemy bars only visible for **current** combat target |
 | `ManaBar` | Every frame; shows regen countdown |
+| `CoinUI` | Every frame; `Gold: {coins}` |
+| `StepDisplayUI` | Every frame; target name + distance + remaining move pool |
 | `StatsUI` | On panel open / after upgrade (`Refresh`) |
-| `TurnIndicatorUI` | Combat turn indicators + roll button pulse/dim |
+| `TurnIndicatorUI` | Combat turn indicators + roll button pulse/dim (`CanRoll`) |
 | `TreasureUpgradeUI` | Modal +2 to random stat, full heal via `ResetStats()` |
 
 ---
@@ -349,11 +377,10 @@ Also used for mana spend/regen (`CharacterStats`) and impact damage (`HeroNaviga
 
 Placed on POI empties under `poiRoot`. On `Start`:
 
-1. Picks prefab by `EnemyType`: Orc, TreasureChest, Mushroom.
-2. Scales enemy to **0.75**.
-3. Adds/configures `CharacterStats`.
-4. Orc → adds `OrcPatrol`; static types disable NavMeshAgent.
-5. Spawns `HealthCanvas` prefab at type-specific height.
+1. Picks prefab by `EnemyType` (see table below).
+2. Scales non-boss enemies to **0.75** (Dragon Bob / worms use prefab scale).
+3. Adds/configures `CharacterStats` and behavior scripts.
+4. Spawns `HealthCanvas` at type-specific height.
 
 ### OrcPatrol
 
@@ -365,13 +392,78 @@ Placed on POI empties under `poiRoot`. On `Start`:
 
 | Type | Moves | Combat | On death |
 |------|-------|--------|----------|
-| Orc | Patrol | Full turns | Resume navigation |
-| Mushroom | Static | Full turns | Resume navigation |
-| TreasureChest | Static | Full turns | Stat upgrade UI |
+| Orc | Patrol | Full turns | Gold 5–10; `RegisterOrcKill()` → worm unlock progress |
+| Mushroom | Static | Full turns | Gold 5–10; resume navigation |
+| TreasureChest | Static | Full turns | Gold 20–50; **TreasureUpgradeUI** |
+| DragonBob | Flies / lands | Boss combat | Gold 100–200; 3s destroy delay |
+| Worm | Static ambush | Full turns | Spawned via coin collect (unlocked) |
 
 ---
 
-## 8. Loading & Startup
+## 8. Dragon Bob (Boss)
+
+**Script:** `DragonBob.cs` — usually on a dedicated POI (`EnemyType.DragonBob`) or placed in scene.
+
+### States (`BobState`)
+
+| State | Behavior |
+|-------|----------|
+| `Flying` | Moves at `flyHeight` toward POIs or over player |
+| `Landing` | Descends to rest at a POI |
+| `Resting` | Idle on ground; `NavMeshObstacle` enabled (Steve paths around) |
+| `TakingOff` | Returns to sky |
+| `InCombat` | Controlled by `CombatSystem` |
+
+### Key settings
+
+| Field | Typical | Purpose |
+|-------|---------|---------|
+| `flyHeight` | 12 | Cruise altitude |
+| `flySpeed` | 10 | Movement speed |
+| `combatEngagementChance` | 0.10 | Chance to fight when landing near Steve |
+| `flyOverPlayerChance` | 0.8 | Bias flight toward player area |
+| `gracePeriodRolls` | 4 | No combat until player has rolled this many times |
+| `isFTUECombat` | — | First-tutorial combat flag |
+
+### Integration
+
+- Subscribes to **`DiceRollSystem.OnAnyDiceRolled`** to count rolls and advance AI.
+- **Scale 2.5×**, high brawn/grit (boss stats).
+- **FTUE shadow:** `PositionForInitialShadow()` places Bob so his shadow falls near Steve at start.
+- On kill: large gold reward; impact/combat death uses `CrossFade("Die")` for animator.
+
+---
+
+## 9. Coins, Gold & Worms
+
+### Coin pickups (`Coin.cs`)
+
+- Spawned by `HeroNavigation.SpawnCoinsAlongPath()` when heading to a new POI (~every 2.5m along NavMesh path).
+- Rotates and bobs; **trigger collider** collects on player contact.
+- **`Collect()`:** `stats.AddGold(1)`, then `TrySpawnWorm(position)`.
+
+### Worm unlock (`GameSettings.cs`)
+
+Persistent singleton (`DontDestroyOnLoad`):
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `orcsKilledToUnlockWorms` | 2 | Orc kills before worms can ambush |
+| `totalOrcsKilled` | runtime | Incremented via `RegisterOrcKill()` from combat or impact kills |
+
+When unlocked, collecting a coin has **10% chance** to spawn a worm and immediately start combat.
+
+### Gold rewards (impact kill, no combat)
+
+| Enemy | Gold |
+|-------|------|
+| Orc / Mushroom | 5–10 |
+| Chest | 20–50 |
+| Dragon Bob | 100–200 |
+
+---
+
+## 10. Loading & Startup
 
 ```mermaid
 sequenceDiagram
@@ -393,7 +485,7 @@ sequenceDiagram
 
 ---
 
-## 9. Script Reference
+## 11. Script Reference
 
 ### Custom gameplay scripts (`Assets/Scripts/`)
 
@@ -401,12 +493,17 @@ sequenceDiagram
 |--------|----------------|
 | `CameraFollow` | Diablo / GoW presets, combat orbit, shake |
 | `CameraToggleUI` | Button to swap presets |
-| `CharacterStats` | HP, mana, attributes, damage, regen |
-| `CombatSystem` | Combat state machine, camera, damage text |
-| `DiceRollSystem` | Roll, physics, warmup, doubles |
-| `HeroNavigation` | NavMesh, POIs, impact, combat handoff |
-| `PointOfInterest` | Spawn enemies at POIs |
+| `CharacterStats` | HP, mana, gold, attributes, damage, regen |
+| `CombatSystem` | Combat state machine, camera, damage text, orc kill tracking |
+| `DiceRollSystem` | Roll, physics, warmup, doubles, `OnAnyDiceRolled` event |
+| `HeroNavigation` | NavMesh, POIs, coins on path, impact, worms, FTUE chest bias |
+| `PointOfInterest` | Spawn enemies at POIs (all `EnemyType` values) |
+| `DragonBob` | Flying boss AI, landing, combat engagement |
 | `OrcPatrol` | Orc idle wander |
+| `Coin` | Pickup spin/bob, gold + worm trigger |
+| `CoinUI` | HUD gold display |
+| `StepDisplayUI` | HUD target + moves remaining |
+| `GameSettings` | Orc kill counter, worm unlock gate |
 | `HealthBar` | HP fill + combat visibility |
 | `ManaBar` | Mana fill + regen timer text |
 | `StatsUI` | Character sheet panel |
@@ -440,7 +537,7 @@ sequenceDiagram
 
 ---
 
-## 10. Scene Wiring Checklist
+## 12. Scene Wiring Checklist
 
 Use this when rebuilding `Main.unity` or debugging missing references.
 
@@ -449,7 +546,9 @@ Use this when rebuilding `Main.unity` or debugging missing references.
 - [ ] `NavMeshAgent` + `Animator` + `CharacterStats` + `HeroNavigation`
 - [ ] Child or reference: `DiceRollSystem` with `dicePrefabs`, `resultText`, `steveAnimator`
 - [ ] `HeroNavigation.poiRoot` → POI parent object
+- [ ] `HeroNavigation.coinPrefab` / `wormPrefab` assigned
 - [ ] `CombatSystem.playerStats` → Steve’s `CharacterStats`
+- [ ] `GameSettings` object in scene (persistent)
 
 ### Camera
 
@@ -472,26 +571,28 @@ Use this when rebuilding `Main.unity` or debugging missing references.
 ### UI
 
 - [ ] Roll button → `DiceRollSystem.Roll()` (UnityEvent)
-- [ ] Player `HealthBar` / `ManaBar` / `StatsUI` referencing Steve stats
+- [ ] Player `HealthBar` / `ManaBar` / `CoinUI` / `StepDisplayUI` / `StatsUI` referencing Steve
+- [ ] Dragon Bob POI with `EnemyType.DragonBob` + dragon prefab
 
 ---
 
-## 11. Asset Packs
+## 13. Asset Packs
 
 | Folder | Contents |
 |--------|----------|
 | `RPGTinyHeroWavePBR` | Steve model, `Steve_Animator.controller` |
-| `RPGMonsterBundlePBR` | Orc, chest, mushroom + animators |
-| `FourEvilDragonsPBR` | Dragon assets (future bosses) |
+| `RPGMonsterBundlePBR` | Orc, chest, mushroom, worm + animators |
+| `FourEvilDragonsPBR` | Dragon Nightmare / Soul Eater / Terror Bringer / Usurper |
 | `Animated Dice (Random Art Attack)` | Dice prefabs, `DiceStats`, materials |
+| `Coins` | Coin/chest pickup meshes and prefabs |
 | `Synty` | Environment (Polygon Nature, etc.) |
 | `Prefabs/HealthCanvas.prefab` | World-space enemy HP bar |
 
 ---
 
-## 12. Versioning
+## 14. Versioning
 
-Git tags follow **`v0.0.00X`**:
+Git tags follow **`v0.0.00X`** on `main`:
 
 | Tag | Summary |
 |-----|---------|
@@ -501,12 +602,17 @@ Git tags follow **`v0.0.00X`**:
 | v0.0.005 | Mushroom enemy, health bar combat cleanup |
 | v0.0.006 | Camera toggle, minor fixes |
 | v0.0.007 | Working build + dragons import |
+| v0.0.008 | `DOCUMENTATION.md` first published |
+| v0.0.009 | Stable — coins, step UI, dragon bob |
+| v0.0.010 | Super stable — dragon flight polish |
+| v0.0.011 | Very solid — `GameSettings`, core refactors |
+| **v0.0.012** | **Documentation updated to match v0.0.011 gameplay** |
 
-**Next:** `v0.0.008`
+**Next gameplay ship:** `v0.0.013`
 
 ---
 
-## 13. Extension Guide
+## 15. Extension Guide
 
 ### Add a new enemy type
 
@@ -551,6 +657,15 @@ A: Doubles the **sum** of both dice — doubles movement distance in exploration
 **Q: Can I roll with 0 mana?**  
 A: No. `CanRoll` requires `currentMana >= 1`; each roll calls `ConsumeMana(1)`.
 
+**Q: When do worms appear?**  
+A: After `GameSettings.totalOrcsKilled >= orcsKilledToUnlockWorms` (default 2 orc kills). Then coin pickups have a 10% ambush chance.
+
+**Q: Why does Bob fly over me?**  
+A: `flyOverPlayerChance` biases target selection toward Steve’s position while in `Flying` state.
+
+**Q: Where is the doc in the repo?**  
+A: Root file **`DOCUMENTATION.md`** — committed with tag **`v0.0.012`**.
+
 ---
 
-*Generated for Oakland v0.0.007. Update this file when adding systems or changing GoW camera behavior.*
+*Last updated for Oakland v0.0.012. Regenerate this section when shipping new tags or changing GoW camera behavior.*
