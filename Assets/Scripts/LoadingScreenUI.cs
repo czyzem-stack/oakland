@@ -67,11 +67,7 @@ public class LoadingScreenUI : MonoBehaviour
 
     private void Update()
     {
-        if (canvasGroup.alpha > 0 && loadingText != null)
-        {
-            float scale = 1f + Mathf.Sin(Time.time * 5f) * 0.05f;
-            loadingText.transform.localScale = Vector3.one * scale;
-        }
+        // Strictly minimal loading screen as requested
     }
 
     public void Show()

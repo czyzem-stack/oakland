@@ -1,35 +1,37 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class LoadingScreenSteve : MonoBehaviour
 {
     private Animator animator;
-    public string animationName = "SprintFWD_Battle_InPlace_SwordAndShield";
-    public float leftBound = -8f;
-    public float rightBound = 8f;
-
-    private float currentProgress = 0f;
+    public List<string> randomAnimations = new List<string> 
+    { 
+        "Idle_Normal_SwordAndShield", 
+        "Dance_SwordAndShield", 
+        "Victory_Battle_SwordAndShield", 
+        "LevelUp_Battle_SwordAndShield",
+        "Challenging_Battle_SwordAndShield",
+        "JumpFull_Spin_RM_SwordAndShield"
+    };
 
     void Start()
     {
         animator = GetComponentInChildren<Animator>();
-        if (animator != null)
-        {
-            animator.Play(animationName);
-        }
-        transform.localRotation = Quaternion.LookRotation(Vector3.right); // Proper way (Right)
-        UpdatePosition();
+        PlayRandomAnimation();
     }
 
     public void SetProgress(float progress)
     {
-        currentProgress = Mathf.Clamp01(progress);
-        UpdatePosition();
+        // Progress no longer moves Steve
     }
 
-    private void UpdatePosition()
+    private void PlayRandomAnimation()
     {
-        float x = Mathf.Lerp(leftBound, rightBound, currentProgress);
-        transform.localPosition = new Vector3(x, 0, 0);
+        if (animator != null && randomAnimations.Count > 0)
+        {
+            string anim = randomAnimations[Random.Range(0, randomAnimations.Count)];
+            animator.CrossFadeInFixedTime(anim, 0.25f);
+        }
     }
 
     void Update()
@@ -37,9 +39,9 @@ public class LoadingScreenSteve : MonoBehaviour
         if (animator != null)
         {
             var state = animator.GetCurrentAnimatorStateInfo(0);
-            if (state.normalizedTime >= 1.0f)
+            if (state.normalizedTime >= 0.95f && !animator.IsInTransition(0))
             {
-                animator.Play(animationName, 0, 0f);
+                PlayRandomAnimation();
             }
         }
     }
