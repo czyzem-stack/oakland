@@ -5,6 +5,12 @@ public class HealthBar : MonoBehaviour
 {
     public CharacterStats stats;
     public Image fillImage;
+    private Canvas cachedCanvas;
+
+    private void Start()
+    {
+        cachedCanvas = GetComponentInParent<Canvas>();
+    }
 
     public void Update()
     {
@@ -30,11 +36,10 @@ public class HealthBar : MonoBehaviour
             }
         }
 
-        // Toggle visibility of the entire canvas/parent
-        Canvas canvas = GetComponentInParent<Canvas>();
-        if (canvas != null && canvas.enabled != shouldBeVisible)
+        // Toggle visibility using cached reference
+        if (cachedCanvas != null && cachedCanvas.enabled != shouldBeVisible)
         {
-            canvas.enabled = shouldBeVisible;
+            cachedCanvas.enabled = shouldBeVisible;
         }
 
         if (!shouldBeVisible) return;

@@ -70,12 +70,22 @@ public float currentHP;
     {
         currentMana = Mathf.Max(0, currentMana - amount);
         Debug.Log($"[CharacterStats] Consumed {amount} Mana. Current: {currentMana}/{MaxMana}");
+        
+        if (CombatSystem.Instance != null)
+        {
+            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"-{amount} Mana", new Color(0.2f, 0.5f, 1f));
+        }
     }
 
     public void RegenerateMana(int amount)
     {
         currentMana = Mathf.Min(currentMana + amount, MaxMana);
         Debug.Log($"[CharacterStats] Regenerated {amount} Mana. Current: {currentMana}/{MaxMana}");
+        
+        if (CombatSystem.Instance != null)
+        {
+            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"+{amount} Mana", new Color(0.4f, 0.8f, 1f));
+        }
     }
 
     public void TakeDamage(float amount)

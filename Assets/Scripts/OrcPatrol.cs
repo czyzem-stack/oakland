@@ -72,9 +72,9 @@ if (agent == null)
         if (animator != null && agent != null && agent.enabled && isPatrolling)
         {
             float speed = agent.velocity.magnitude / agent.speed;
-            animator.SetFloat("Speed", speed);
+            animator.SafeSetFloat("Speed", speed);
         }
-    }
+}
 
     private IEnumerator PatrolRoutine()
     {

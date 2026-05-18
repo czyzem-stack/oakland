@@ -14,12 +14,14 @@ public class CombatSystem : MonoBehaviour
 
     [Header("Juice Prefabs")]
     public GameObject hitEffectPrefab;
+    private Font damageFont;
 
     private void Awake()
     {
         Instance = this;
+        damageFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         // Try to auto-load the blood splatter if not set
-        if (hitEffectPrefab == null)
+if (hitEffectPrefab == null)
         {
             hitEffectPrefab = UnityEngine.Resources.Load<GameObject>("FX_Blood_Splatter_01");
             // If Resources.Load fails (it will if not in Resources), we'll search in Start via AssetDatabase (Editor only) or just keep it null.
@@ -76,8 +78,8 @@ public class CombatSystem : MonoBehaviour
         bool isStatic = enemy.name.Contains("Chest");
 
         // Set to run speed
-        if (pAnim != null) pAnim.SetFloat("Speed", 1.5f);
-        if (eAnim != null && !isStatic) eAnim.SetFloat("Speed", 1.5f);
+        if (pAnim != null) pAnim.SafeSetFloat("Speed", 1.5f);
+        if (eAnim != null && !isStatic) eAnim.SafeSetFloat("Speed", 1.5f);
 
         float duration = 0.5f; // Faster charge
         float elapsed = 0;
@@ -107,12 +109,12 @@ public class CombatSystem : MonoBehaviour
         playerStats.transform.position = playerTarget;
         enemy.transform.position = enemyTarget;
         
-        if (pAnim != null) pAnim.SetFloat("Speed", 0f);
-        if (eAnim != null) eAnim.SetFloat("Speed", 0f);
+        if (pAnim != null) pAnim.SafeSetFloat("Speed", 0f);
+        if (eAnim != null) eAnim.SafeSetFloat("Speed", 0f);
 
         // Visual "Ready" flinch
-        if (eAnim != null) eAnim.SetTrigger("GetHit");
-        if (pAnim != null) pAnim.SetTrigger("GetHit");
+        if (eAnim != null) eAnim.SafeSetTrigger("GetHit");
+        if (pAnim != null) pAnim.SafeSetTrigger("GetHit");
 
         yield return new WaitForSeconds(0.2f);
 
@@ -178,7 +180,7 @@ yield return null;
         bool isCritical = rollValue >= playerStats.critThreshold; 
         
         Animator playerAnim = playerStats.GetComponent<Animator>();
-if (playerAnim != null) playerAnim.SetTrigger("Attack");
+        if (playerAnim != null) playerAnim.SafeSetTrigger("Attack");
 
         // Faster impact timing (snappier)
         yield return new WaitForSeconds(0.35f);
@@ -207,15 +209,15 @@ if (playerAnim != null) playerAnim.SetTrigger("Attack");
         if (camFollow != null) camFollow.Shake(0.2f, isCritical ? 0.35f : 0.18f);
 
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
-if (enemyAnim != null) enemyAnim.SetTrigger("GetHit");
+        if (enemyAnim != null) enemyAnim.SafeSetTrigger("GetHit");
 
         // Recovery time
         yield return new WaitForSeconds(1.0f);
 
         if (currentEnemyStats != null && currentEnemyStats.currentHP <= 0)
         {
-            if (enemyAnim != null) enemyAnim.SetTrigger("Die");
-            yield return new WaitForSeconds(0.5f);
+            if (enemyAnim != null) enemyAnim.SafeSetTrigger("Die");
+yield return new WaitForSeconds(0.5f);
             EndCombat(true);
         }
         else
@@ -230,7 +232,7 @@ if (enemyAnim != null) enemyAnim.SetTrigger("GetHit");
         if (currentEnemyStats == null) yield break;
 
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
-        if (enemyAnim != null) enemyAnim.SetTrigger("Attack");
+        if (enemyAnim != null) enemyAnim.SafeSetTrigger("Attack");
 
         // Wait for impact
         yield return new WaitForSeconds(0.35f);
@@ -238,7 +240,7 @@ if (enemyAnim != null) enemyAnim.SetTrigger("GetHit");
         int enemyRoll = Random.Range(1, 13);
         bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
         int damage = enemyRoll + currentEnemyStats.MeleeDamage;
-if (isCritical) damage *= 2;
+        if (isCritical) damage *= 2;
 
         playerStats.TakeDamage(damage);
         
@@ -254,7 +256,7 @@ if (isCritical) damage *= 2;
         if (camFollow != null) camFollow.Shake(0.2f, isCritical ? 0.25f : 0.12f);
 
         Animator playerAnim = playerStats.GetComponent<Animator>();
-if (playerAnim != null) playerAnim.SetTrigger("GetHit");
+        if (playerAnim != null) playerAnim.SafeSetTrigger("GetHit");
 
         yield return new WaitForSeconds(1.0f);
     }
@@ -262,10 +264,9 @@ if (playerAnim != null) playerAnim.SetTrigger("GetHit");
     public void SpawnDamageText(Vector3 position, string text, Color color)
     {
         GameObject canvasGo = new GameObject("DamageTextCanvas");
-canvasGo.transform.position = position + Vector3.up * 0.5f; // Initial offset
+        canvasGo.transform.position = position + Vector3.up * 0.5f; // Initial offset
         Canvas canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
-        canvasGo.AddComponent<CanvasScaler>();
         canvasGo.AddComponent<FaceCamera>();
         canvasGo.AddComponent<CanvasGroup>(); // Ensure component exists for script
         
@@ -276,9 +277,9 @@ canvasGo.transform.position = position + Vector3.up * 0.5f; // Initial offset
         GameObject textGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
         textGo.transform.SetParent(canvasGo.transform, false);
         Text t = textGo.GetComponent<Text>();
-        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.font = damageFont != null ? damageFont : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         t.fontSize = 60; // Bigger font
-        t.fontStyle = FontStyle.Bold;
+t.fontStyle = FontStyle.Bold;
         t.alignment = TextAnchor.MiddleCenter;
         t.horizontalOverflow = HorizontalWrapMode.Overflow;
         t.verticalOverflow = VerticalWrapMode.Overflow;
@@ -309,7 +310,7 @@ canvasGo.transform.position = position + Vector3.up * 0.5f; // Initial offset
         {
             playerAnim.ResetTrigger("Attack");
             playerAnim.ResetTrigger("GetHit");
-            playerAnim.SetFloat("Speed", 0f);
+            playerAnim.SafeSetFloat("Speed", 0f);
         }
 
         // Reset Camera
@@ -323,14 +324,22 @@ camFollow.target = playerStats.transform;
             }
         }
 
-        // Re-enable NavMeshAgent
+        // Re-enable NavMeshAgent and ensure it's on the mesh
         var agent = playerStats.GetComponent<UnityEngine.AI.NavMeshAgent>();
-        if (agent != null) agent.enabled = true;
+        if (agent != null)
+        {
+            agent.enabled = true;
+            if (UnityEngine.AI.NavMesh.SamplePosition(playerStats.transform.position, out UnityEngine.AI.NavMeshHit hit, 2.0f, UnityEngine.AI.NavMesh.AllAreas))
+            {
+                agent.Warp(hit.position);
+            }
+        }
 
         if (playerWon && currentEnemyStats != null)
         {
+            if (playerAnim != null) playerAnim.SafeSetTrigger("Victory");
             bool isChest = currentEnemyStats.name.Contains("TreasureChest") || currentEnemyStats.name.Contains("Chest");
-            
+
             // Allow movement to continue
             GameObject.Destroy(currentEnemyStats.gameObject, 1.5f);
             currentEnemyStats = null;

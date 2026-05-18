@@ -9,12 +9,29 @@ public class LoadingScreenUI : MonoBehaviour
     public CanvasGroup canvasGroup;
     public Text loadingText;
     public float fadeDuration = 0.5f;
+    private LoadingScreenSteve steve;
 
     private void Awake()
     {
         if (Instance == null)
         {
             Instance = this;
+            transform.SetParent(null);
+            
+            // Ensure we have a Canvas to render since we are now a root object
+            Canvas canvas = GetComponent<Canvas>();
+            if (canvas == null)
+            {
+                canvas = gameObject.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = 999;
+            }
+            
+            if (GetComponent<GraphicRaycaster>() == null)
+            {
+                gameObject.AddComponent<GraphicRaycaster>();
+            }
+
             DontDestroyOnLoad(gameObject);
         }
         else
@@ -29,9 +46,17 @@ public class LoadingScreenUI : MonoBehaviour
 
     private void Start()
     {
+        steve = GetComponentInChildren<LoadingScreenSteve>();
         // Start visible and wait for initialization
         canvasGroup.alpha = 1f;
         canvasGroup.blocksRaycasts = true;
+        SetProgress(0f);
+    }
+
+    public void SetProgress(float progress)
+    {
+        if (steve == null) steve = GetComponentInChildren<LoadingScreenSteve>();
+        if (steve != null) steve.SetProgress(progress);
     }
 
     public void OnSystemInitialized()

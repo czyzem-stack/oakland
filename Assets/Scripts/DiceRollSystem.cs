@@ -53,9 +53,12 @@ public class DiceRollSystem : MonoBehaviour
         Debug.Log("[DiceRollSystem] Starting Warmup...");
         List<GameObject> tempObjects = new List<GameObject>();
 
+        if (LoadingScreenUI.Instance != null) LoadingScreenUI.Instance.SetProgress(0.05f);
+
         // Spawn all prefabs to force mesh/material/shader loading
-        foreach (var prefab in dicePrefabs)
+        for (int i = 0; i < dicePrefabs.Count; i++)
         {
+            var prefab = dicePrefabs[i];
             if (prefab == null) continue;
             // Spawn far below the world
             GameObject temp = Instantiate(prefab, new Vector3(0, -500, 0), Quaternion.identity);
@@ -68,17 +71,23 @@ public class DiceRollSystem : MonoBehaviour
             }
 
             tempObjects.Add(temp);
-yield return null; 
+            
+            float progress = 0.05f + ((float)i / dicePrefabs.Count) * 0.8f;
+            if (LoadingScreenUI.Instance != null) LoadingScreenUI.Instance.SetProgress(progress);
+            
+            yield return null; 
         }
 
         // Wait a few frames for engine to process initial physics/render calls
         yield return new WaitForSeconds(0.5f);
+        if (LoadingScreenUI.Instance != null) LoadingScreenUI.Instance.SetProgress(0.9f);
 
         // Cleanup
         foreach (var obj in tempObjects) Destroy(obj);
         
         // Final settle time to allow GC/Cleanup to finish before screen fades
         yield return new WaitForSeconds(0.5f);
+        if (LoadingScreenUI.Instance != null) LoadingScreenUI.Instance.SetProgress(1.0f);
 
         Debug.Log("[DiceRollSystem] Warmup and Settle Complete.");
         if (LoadingScreenUI.Instance != null)
@@ -119,13 +128,25 @@ yield return null;
         }
     }
 
+    public bool CanRoll
+    {
+        get
+        {
+            if (isRolling || IsSteveBusy()) return false;
+            
+            CharacterStats stats = GetComponentInParent<CharacterStats>();
+            if (stats == null) stats = GetComponentInChildren<CharacterStats>();
+            return stats != null && stats.currentMana >= 1;
+        }
+    }
+
     public void Roll()
     {
         RefreshReferences(); 
 
-        if (isRolling || IsSteveBusy()) 
+        if (!CanRoll) 
         {
-            Debug.Log("[DiceRollSystem] Roll ignored - Steve is busy.");
+            Debug.Log("[DiceRollSystem] Roll ignored - cannot roll right now.");
             return;
         }
         
@@ -161,8 +182,11 @@ yield return null;
         Debug.Log("[DiceRollSystem] RollRoutine started.");
         isRolling = true;
 
+        // Give the animation a moment to reach the 'release' point
+        yield return new WaitForSeconds(0.45f);
+
         if (resultText != null) 
-        {
+{
             resultText.text = ""; 
             resultText.gameObject.SetActive(false);
         }
@@ -282,7 +306,7 @@ timer += Time.deltaTime;
         while (elapsed < fadeDuration)
         {
             elapsed += Time.deltaTime;
-            float alpha = 1f - (elapsed / fadeDuration);
+            float alpha = Mathf.Clamp01(1f - (elapsed / fadeDuration));
 
             foreach (var die in diceBatch)
             {

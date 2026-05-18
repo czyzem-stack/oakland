@@ -12,8 +12,11 @@ public class TurnIndicatorUI : MonoBehaviour
     public float dimAlpha = 0.4f;
     public float pulseSpeed = 4f;
 
+    private DiceRollSystem diceSystem;
+
     private void Start()
     {
+        diceSystem = Object.FindAnyObjectByType<DiceRollSystem>();
         if (rollButtonCanvasGroup == null)
         {
             GameObject rb = GameObject.Find("RollButton");
@@ -41,26 +44,27 @@ public class TurnIndicatorUI : MonoBehaviour
         // Handle Roll Button Feedback
         if (rollButtonCanvasGroup != null)
         {
-            if (!inCombat)
+            bool canRoll = diceSystem != null && diceSystem.CanRoll;
+            
+            if (canRoll)
             {
-                rollButtonCanvasGroup.alpha = 1f;
+                if (inCombat && isPlayerTurn)
+                {
+                    // Pulse "Glow" when it's your turn in combat
+                    float pulse = 0.8f + Mathf.Sin(Time.time * pulseSpeed) * 0.2f;
+                    rollButtonCanvasGroup.alpha = pulse;
+                }
+                else
+                {
+                    rollButtonCanvasGroup.alpha = 1f;
+                }
                 rollButtonCanvasGroup.interactable = true;
             }
             else
             {
-                if (isPlayerTurn)
-                {
-                    // Pulse "Glow"
-                    float pulse = 0.8f + Mathf.Sin(Time.time * pulseSpeed) * 0.2f;
-                    rollButtonCanvasGroup.alpha = pulse;
-                    rollButtonCanvasGroup.interactable = true;
-                }
-                else
-                {
-                    // Dim
-                    rollButtonCanvasGroup.alpha = dimAlpha;
-                    rollButtonCanvasGroup.interactable = false;
-                }
+                // Dim and disable if can't roll (busy, no mana, or not your turn)
+                rollButtonCanvasGroup.alpha = dimAlpha;
+                rollButtonCanvasGroup.interactable = false;
             }
         }
     }

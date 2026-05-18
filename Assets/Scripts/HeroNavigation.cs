@@ -63,7 +63,7 @@ public float remainingMeters = 0f;
 
             // Sync animation
             float speed = agent.velocity.magnitude / agent.speed;
-            if (animator != null) animator.SetFloat("Speed", speed);
+            if (animator != null) animator.SafeSetFloat("Speed", speed);
 
             // Check if arrived at POI
             if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
@@ -80,11 +80,11 @@ public float remainingMeters = 0f;
         }
         else
         {
-            if (animator != null) animator.SetFloat("Speed", 0f);
+            if (animator != null) animator.SafeSetFloat("Speed", 0f);
             if (isMoving) StopMoving("Movement Paused");
             lastPosition = transform.position; 
         }
-    }
+}
 
     public void OnDiceRolled(int totalValue)
     {
@@ -183,15 +183,16 @@ public float remainingMeters = 0f;
                     Camera.main.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f);
                 }
 
-                if (animator != null) animator.SetTrigger("Attack");
+                if (animator != null) animator.SafeSetTrigger("Attack");
                 
                 remainingMeters = 0; // Move pool consumed by the impact
 
                 if (enemyStats.isDead)
                 {
+                    if (animator != null) animator.SafeSetTrigger("Victory");
                     Animator enemyAnim = enemyStats.GetComponent<Animator>();
-                    if (enemyAnim != null) enemyAnim.SetTrigger("Die");
-                    
+if (enemyAnim != null) enemyAnim.SafeSetTrigger("Die");
+
                     bool isChest = enemyStats.name.Contains("TreasureChest") || enemyStats.name.Contains("Chest");
                     GameObject.Destroy(enemyStats.gameObject, 2f);
                     StopMoving("Enemy Defeated by Impact");

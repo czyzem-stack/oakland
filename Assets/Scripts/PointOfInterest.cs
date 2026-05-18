@@ -97,8 +97,8 @@ CharacterStats stats = enemy.GetComponent<CharacterStats>();
             {
                 case EnemyType.Orc: height = 2.5f; break;
                 case EnemyType.Mushroom: height = 1.6f; break;
-                case EnemyType.TreasureChest: height = 1.0f; break;
-            }
+                case EnemyType.TreasureChest: height = 1.8f; break;
+                }
             canvas.transform.localPosition = new Vector3(0, height, 0);
 
             var bar = canvas.GetComponentInChildren<HealthBar>();
