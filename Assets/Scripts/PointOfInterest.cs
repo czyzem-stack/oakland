@@ -3,7 +3,8 @@ using UnityEngine;
 public enum EnemyType
 {
     Orc,
-    TreasureChest
+    TreasureChest,
+    Mushroom
 }
 
 public class PointOfInterest : MonoBehaviour
@@ -13,6 +14,7 @@ public class PointOfInterest : MonoBehaviour
     [Header("Prefabs")]
     public GameObject orcPrefab;
     public GameObject chestPrefab;
+    public GameObject mushroomPrefab;
     public GameObject healthCanvasPrefab;
 
     private void Start()
@@ -23,7 +25,6 @@ public class PointOfInterest : MonoBehaviour
     public void EnsureEnemy()
     {
         // Remove existing enemy children if they don't match the selection
-        // We look for objects with CharacterStats
         CharacterStats existing = GetComponentInChildren<CharacterStats>();
         if (existing != null)
         {
@@ -42,7 +43,14 @@ public class PointOfInterest : MonoBehaviour
 
     private void SpawnEnemy()
     {
-        GameObject prefab = (enemyType == EnemyType.Orc) ? orcPrefab : chestPrefab;
+        GameObject prefab = null;
+        switch(enemyType)
+        {
+            case EnemyType.Orc: prefab = orcPrefab; break;
+            case EnemyType.TreasureChest: prefab = chestPrefab; break;
+            case EnemyType.Mushroom: prefab = mushroomPrefab; break;
+        }
+
         if (prefab == null) return;
 
         GameObject enemy = Instantiate(prefab, transform.position, transform.rotation, transform);
@@ -53,14 +61,14 @@ public class PointOfInterest : MonoBehaviour
         if (stats == null) stats = enemy.AddComponent<CharacterStats>();
         
         // Base Stats setup
-        if (enemyType == EnemyType.TreasureChest)
+        if (enemyType == EnemyType.TreasureChest || enemyType == EnemyType.Mushroom)
         {
-            stats.brawn = 10;
+            stats.brawn = (enemyType == EnemyType.TreasureChest) ? 10 : 12;
             stats.finesse = 5;
             stats.grit = 5;
             stats.ResetStats();
             
-            // Chests are static
+            // Static enemies - disable navigation
             var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
             if (agent != null) agent.enabled = false;
         }
@@ -79,9 +87,19 @@ public class PointOfInterest : MonoBehaviour
         {
             GameObject canvas = Instantiate(healthCanvasPrefab, enemy.transform);
             canvas.name = "HealthCanvas";
-            // HealthBar needs to know about stats
+            
+            // Adjust height based on enemy type
+            float height = 2.0f;
+            switch (enemyType)
+            {
+                case EnemyType.Orc: height = 2.5f; break;
+                case EnemyType.Mushroom: height = 1.6f; break;
+                case EnemyType.TreasureChest: height = 1.0f; break;
+            }
+            canvas.transform.localPosition = new Vector3(0, height, 0);
+
             var bar = canvas.GetComponentInChildren<HealthBar>();
             if (bar != null) bar.stats = stats;
         }
-        }
-        }
+}
+}

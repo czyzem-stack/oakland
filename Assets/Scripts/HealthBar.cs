@@ -10,8 +10,37 @@ public class HealthBar : MonoBehaviour
     {
         if (stats == null || fillImage == null) return;
 
+        bool isPlayer = false;
+        if (CombatSystem.Instance != null && CombatSystem.Instance.playerStats == stats)
+        {
+            isPlayer = true;
+        }
+
+        // Enemy-specific visibility logic
+        bool shouldBeVisible = true;
+        if (!isPlayer)
+        {
+            shouldBeVisible = false;
+            if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
+            {
+                if (CombatSystem.Instance.currentEnemyStats == stats)
+                {
+                    shouldBeVisible = true;
+                }
+            }
+        }
+
+        // Toggle visibility of the entire canvas/parent
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas != null && canvas.enabled != shouldBeVisible)
+        {
+            canvas.enabled = shouldBeVisible;
+        }
+
+        if (!shouldBeVisible) return;
+
         float fill = stats.MaxHP > 0 ? stats.currentHP / (float)stats.MaxHP : 0;
-        // Use localScale instead of fillAmount to allow solid color without sprite
+// Use localScale instead of fillAmount to allow solid color without sprite
         fillImage.transform.localScale = new Vector3(fill, 1, 1);
     }
 }
