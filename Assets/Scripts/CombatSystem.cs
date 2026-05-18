@@ -37,19 +37,76 @@ public class CombatSystem : MonoBehaviour
         isPlayerTurn = true;
         Debug.Log("[CombatSystem] Combat Started against " + enemy.name);
 
-        // Disable NavMeshAgent to allow manual positioning
-        var agent = playerStats.GetComponent<UnityEngine.AI.NavMeshAgent>();
-        if (agent != null) agent.enabled = false;
+        StartCoroutine(CombatTransitionRoutine(enemy));
+    }
 
-        // Position player to face enemy at a proper distance (2.5 units)
+    private IEnumerator CombatTransitionRoutine(CharacterStats enemy)
+    {
+        // 1. Setup - Disable navigation
+        var pAgent = playerStats.GetComponent<UnityEngine.AI.NavMeshAgent>();
+        var eAgent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
+
+        if (pAgent != null) pAgent.enabled = false;
+        if (eAgent != null && eAgent.isOnNavMesh) eAgent.isStopped = true;
+
+        // 2. Calculate Target Positions (Facing each other at 2.5m distance)
         Vector3 directionToPlayer = (playerStats.transform.position - enemy.transform.position).normalized;
-        if (directionToPlayer.sqrMagnitude < 0.01f) directionToPlayer = Vector3.back; 
-        
-        playerStats.transform.position = enemy.transform.position + directionToPlayer * 2.5f;
-        playerStats.transform.LookAt(new Vector3(enemy.transform.position.x, playerStats.transform.position.y, enemy.transform.position.z));
-        enemy.transform.LookAt(new Vector3(playerStats.transform.position.x, enemy.transform.position.y, playerStats.transform.position.z));
+        if (directionToPlayer.sqrMagnitude < 0.01f) directionToPlayer = Vector3.back;
 
-        // Dynamic Camera
+        // Find a center point to anchor the fight
+        Vector3 center = (playerStats.transform.position + enemy.transform.position) * 0.5f;
+        Vector3 playerTarget = center + directionToPlayer * 1.25f;
+        Vector3 enemyTarget = center - directionToPlayer * 1.25f;
+
+        // Sample NavMesh to ensure we don't end up in a wall
+        UnityEngine.AI.NavMeshHit hit;
+        if (UnityEngine.AI.NavMesh.SamplePosition(playerTarget, out hit, 3f, UnityEngine.AI.NavMesh.AllAreas)) playerTarget = hit.position;
+        if (UnityEngine.AI.NavMesh.SamplePosition(enemyTarget, out hit, 3f, UnityEngine.AI.NavMesh.AllAreas)) enemyTarget = hit.position;
+
+        // 3. Charge!
+        Animator pAnim = playerStats.GetComponent<Animator>();
+        Animator eAnim = enemy.GetComponent<Animator>();
+        
+        // Only "run" if the enemy isn't a chest (chests don't have OrcPatrol or are static)
+        bool isStatic = enemy.name.Contains("Chest");
+
+        if (pAnim != null) pAnim.SetFloat("Speed", 1f);
+        if (eAnim != null && !isStatic) eAnim.SetFloat("Speed", 1f);
+
+        // Optional: Taunt/Reaction trigger
+        if (eAnim != null) eAnim.SetTrigger("GetHit"); // "GetHit" often looks like a flinch/ready stance in these packs
+
+        float duration = 0.6f;
+        float elapsed = 0;
+        Vector3 pStart = playerStats.transform.position;
+        Vector3 eStart = enemy.transform.position;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            float curve = t * (2 - t); // Simple ease out
+
+            playerStats.transform.position = Vector3.Lerp(pStart, playerTarget, curve);
+            playerStats.transform.LookAt(new Vector3(enemyTarget.x, playerStats.transform.position.y, enemyTarget.z));
+
+            if (!isStatic)
+            {
+                enemy.transform.position = Vector3.Lerp(eStart, enemyTarget, curve);
+            }
+            enemy.transform.LookAt(new Vector3(playerTarget.x, enemy.transform.position.y, playerTarget.z));
+
+            yield return null;
+        }
+
+        // 4. Finalize position and rotation
+        playerStats.transform.position = playerTarget;
+        enemy.transform.position = enemyTarget;
+        
+        if (pAnim != null) pAnim.SetFloat("Speed", 0f);
+        if (eAnim != null) eAnim.SetFloat("Speed", 0f);
+
+        // 5. Dynamic Camera Setup
         var camFollow = Camera.main.GetComponent<CameraFollow>();
         if (camFollow != null)
         {
@@ -269,11 +326,21 @@ canvasGo.transform.position = position + Vector3.up * 0.5f; // Initial offset
 
         if (playerWon && currentEnemyStats != null)
         {
+            bool isChest = currentEnemyStats.name.Contains("TreasureChest") || currentEnemyStats.name.Contains("Chest");
+            
             // Allow movement to continue
             GameObject.Destroy(currentEnemyStats.gameObject, 1.5f);
             currentEnemyStats = null;
-            var nav = playerStats.GetComponent<HeroNavigation>();
-            if (nav != null) nav.ResumeAfterCombat();
+
+            if (isChest && TreasureUpgradeUI.Instance != null)
+            {
+                TreasureUpgradeUI.Instance.ShowUpgrade(playerStats);
+            }
+            else
+            {
+                var nav = playerStats.GetComponent<HeroNavigation>();
+                if (nav != null) nav.ResumeAfterCombat();
+            }
         }
-    }
-}
+        }
+        }

@@ -49,26 +49,29 @@ public class OrcPatrol : MonoBehaviour
             return;
         }
 
-        if (animator != null && agent != null && agent.enabled)
-{
-            float speed = agent.velocity.magnitude / agent.speed;
-            animator.SetFloat("Speed", speed);
-        }
-
         // Engage/Disengage logic
-        if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat && CombatSystem.Instance.currentEnemyStats == GetComponent<CharacterStats>())
+        bool isInActiveCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat && CombatSystem.Instance.currentEnemyStats == stats;
+
+        if (isInActiveCombat)
         {
             if (isPatrolling)
             {
                 isPatrolling = false;
                 if (agent.isOnNavMesh) agent.isStopped = true;
-                animator.SetFloat("Speed", 0f);
+                // Don't set Speed to 0 here, let CombatSystem handle it
             }
+            return; // Exit Update - let CombatSystem control the orc
         }
         else if (!isPatrolling && (CombatSystem.Instance == null || !CombatSystem.Instance.isInCombat))
         {
             isPatrolling = true;
             if (agent.isOnNavMesh) agent.isStopped = false;
+        }
+
+        if (animator != null && agent != null && agent.enabled && isPatrolling)
+        {
+            float speed = agent.velocity.magnitude / agent.speed;
+            animator.SetFloat("Speed", speed);
         }
     }
 

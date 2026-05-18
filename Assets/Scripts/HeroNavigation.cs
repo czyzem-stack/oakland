@@ -52,8 +52,11 @@ public float remainingMeters = 0f;
         EnsureComponents();
         if (agent == null) return;
 
+        // Skip animation syncing if in combat - let CombatSystem control it
+        if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return;
+
         if (isMoving && remainingMeters > 0)
-        {
+{
             // Calculate distance moved this frame
             float distMoved = Vector3.Distance(transform.position, lastPosition);
             remainingMeters -= distMoved;
@@ -189,14 +192,20 @@ public float remainingMeters = 0f;
                 {
                     Animator enemyAnim = enemyStats.GetComponent<Animator>();
                     if (enemyAnim != null) enemyAnim.SetTrigger("Die");
+                    
+                    bool isChest = enemyStats.name.Contains("TreasureChest") || enemyStats.name.Contains("Chest");
                     GameObject.Destroy(enemyStats.gameObject, 2f);
                     StopMoving("Enemy Defeated by Impact");
                     
-                    // Proceed to next POI if any logic allows, but for now just stop
+                    if (isChest && TreasureUpgradeUI.Instance != null)
+                    {
+                        TreasureUpgradeUI.Instance.ShowUpgrade(stats);
+                    }
+
                     currentTarget = null;
                     return;
                 }
-            }
+}
 
             StopMoving("Enemy Encountered");
             CombatSystem.Instance.StartCombat(enemyStats);
