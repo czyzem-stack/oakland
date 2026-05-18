@@ -10,18 +10,33 @@ public class HeroNavigation : MonoBehaviour
     public Transform poiRoot;
     public float metersPerDicePoint = 1.0f;
     public float arrivalDistance = 1.0f;
+    public GameObject coinPrefab;
 
     private NavMeshAgent agent;
     private Animator animator;
     private List<Transform> availablePOIs = new List<Transform>();
     private Transform currentTarget;
     private CharacterStats stats;
-    
+
     [Header("Status")]
-public float remainingMeters = 0f;
+    public float remainingMeters = 0f;
     public bool isMoving = false;
     private Vector3 lastPosition;
     private float totalDistanceForCurrentMove = 0f;
+    private float metersTraveledSinceLastCoin = 0f;
+    private bool spawnedCoinsForCurrentTarget = false;
+
+    public float DistanceToTarget
+    {
+        get
+        {
+            if (currentTarget == null || agent == null || !agent.isOnNavMesh) return 0f;
+            if (agent.pathPending) return Vector3.Distance(transform.position, currentTarget.position);
+            return agent.remainingDistance;
+        }
+    }
+
+    public string TargetName => currentTarget != null ? currentTarget.name : "None";
 
     private void EnsureComponents()
     {
@@ -55,10 +70,19 @@ public float remainingMeters = 0f;
         if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return;
 
         if (isMoving && remainingMeters > 0)
-{
+        {
             // Calculate distance moved this frame
             float distMoved = Vector3.Distance(transform.position, lastPosition);
             remainingMeters -= distMoved;
+            metersTraveledSinceLastCoin += distMoved;
+
+            if (metersTraveledSinceLastCoin >= 3f)
+            {
+                // We could reward directly, but the user wants spinning coins to collect
+                // Spawning them ahead of time is better.
+                metersTraveledSinceLastCoin = 0f;
+            }
+
             lastPosition = transform.position;
 
             // Sync animation
@@ -66,7 +90,7 @@ public float remainingMeters = 0f;
             if (animator != null) animator.SafeSetFloat("Speed", speed);
 
             // Check if arrived at POI
-            if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
+            if (currentTarget != null && !agent.pathPending && agent.isOnNavMesh && agent.remainingDistance <= agent.stoppingDistance)
             {
                 Debug.Log($"[HeroNavigation] Reached POI: {currentTarget.name}. Total meters remaining: {remainingMeters:F2}");
                 OnReachedPOI();
@@ -74,7 +98,8 @@ public float remainingMeters = 0f;
             // Check if out of fuel
             else if (remainingMeters <= 0)
             {
-                Debug.Log($"[HeroNavigation] Stopped: Out of distance ({totalDistanceForCurrentMove:F2}m target met). Distance to POI: {agent.remainingDistance:F2}m");
+                float dist = agent.isOnNavMesh ? agent.remainingDistance : Vector3.Distance(transform.position, currentTarget.position);
+                Debug.Log($"[HeroNavigation] Stopped: Out of distance ({totalDistanceForCurrentMove:F2}m target met). Distance to POI: {dist:F2}m");
                 StopMoving("Out of distance");
             }
         }
@@ -84,7 +109,7 @@ public float remainingMeters = 0f;
             if (isMoving) StopMoving("Movement Paused");
             lastPosition = transform.position; 
         }
-}
+    }
 
     public void OnDiceRolled(int totalValue)
     {
@@ -95,6 +120,16 @@ public float remainingMeters = 0f;
         }
 
         EnsureComponents();
+
+        // Ensure agent is on NavMesh before calculating path
+        if (agent != null && !agent.isOnNavMesh)
+        {
+            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5.0f, NavMesh.AllAreas))
+            {
+                agent.Warp(hit.position);
+            }
+        }
+
         float gainedDistance = totalValue * metersPerDicePoint;
         remainingMeters += gainedDistance;
         totalDistanceForCurrentMove = gainedDistance;
@@ -105,14 +140,58 @@ public float remainingMeters = 0f;
             SelectNextPOI();
         }
 
-        if (currentTarget != null && agent != null)
+        if (currentTarget != null && agent != null && agent.isOnNavMesh)
         {
+            if (!spawnedCoinsForCurrentTarget)
+            {
+                SpawnCoinsAlongPath();
+            }
             StartMoving();
+        }
+    }
+
+    private void SpawnCoinsAlongPath()
+    {
+        if (coinPrefab == null || agent == null || currentTarget == null) return;
+
+        spawnedCoinsForCurrentTarget = true;
+        NavMeshPath path = new NavMeshPath();
+        if (agent.CalculatePath(currentTarget.position, path))
+        {
+            float currentDist = 0;
+            float coinInterval = 2.5f; 
+            float nextCoinDist = 2.0f; 
+
+            for (int i = 0; i < path.corners.Length - 1; i++)
+            {
+                Vector3 start = path.corners[i];
+                Vector3 end = path.corners[i + 1];
+                float segmentLen = Vector3.Distance(start, end);
+
+                while (currentDist + segmentLen >= nextCoinDist)
+                {
+                    float t = (nextCoinDist - currentDist) / segmentLen;
+                    Vector3 spawnPos = Vector3.Lerp(start, end, t);
+                    
+                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, NavMesh.AllAreas))
+                    {
+                        spawnPos = hit.position + Vector3.up * 0.7f; 
+                    }
+
+                    GameObject coin = Instantiate(coinPrefab, spawnPos, Quaternion.identity);
+                    coin.transform.localScale = Vector3.one * 6f; 
+                    if (coin.GetComponent<Coin>() == null) coin.AddComponent<Coin>();
+                    
+                    nextCoinDist += coinInterval;
+                }
+                currentDist += segmentLen;
+            }
         }
     }
 
     private void SelectNextPOI()
     {
+        spawnedCoinsForCurrentTarget = false;
         if (availablePOIs.Count == 0)
         {
             ResetPOIs();
@@ -191,10 +270,21 @@ public float remainingMeters = 0f;
                 {
                     if (animator != null) animator.SafeSetTrigger("Victory");
                     Animator enemyAnim = enemyStats.GetComponent<Animator>();
-if (enemyAnim != null) enemyAnim.SafeSetTrigger("Die");
-
+                    
                     bool isChest = enemyStats.name.Contains("TreasureChest") || enemyStats.name.Contains("Chest");
-                    GameObject.Destroy(enemyStats.gameObject, 2f);
+                    bool isDragon = enemyStats.name.Contains("DragonBob");
+
+                    if (enemyAnim != null)
+                    {
+                        if (isDragon) enemyAnim.CrossFade("Die", 0.1f);
+                        else enemyAnim.SafeSetTrigger("Die");
+                    }
+                    
+                    if (isChest) stats.AddGold(Random.Range(20, 51));
+                    else if (isDragon) stats.AddGold(Random.Range(100, 201));
+                    else stats.AddGold(Random.Range(5, 11)); // Orcs/Mushrooms
+
+                    GameObject.Destroy(enemyStats.gameObject, isDragon ? 3f : 2f);
                     StopMoving("Enemy Defeated by Impact");
                     
                     if (isChest && TreasureUpgradeUI.Instance != null)
@@ -218,6 +308,10 @@ if (enemyAnim != null) enemyAnim.SafeSetTrigger("Die");
         if (remainingMeters > 0.1f)
         {
             Debug.Log("[HeroNavigation] Distance remains, continuing to next POI.");
+            if (!spawnedCoinsForCurrentTarget)
+            {
+                SpawnCoinsAlongPath();
+            }
             StartMoving();
         }
         else

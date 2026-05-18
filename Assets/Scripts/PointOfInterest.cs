@@ -4,7 +4,8 @@ public enum EnemyType
 {
     Orc,
     TreasureChest,
-    Mushroom
+    Mushroom,
+    DragonBob
 }
 
 public class PointOfInterest : MonoBehaviour
@@ -15,6 +16,7 @@ public class PointOfInterest : MonoBehaviour
     public GameObject orcPrefab;
     public GameObject chestPrefab;
     public GameObject mushroomPrefab;
+    public GameObject dragonPrefab;
     public GameObject healthCanvasPrefab;
 
     private void Start()
@@ -29,7 +31,9 @@ public class PointOfInterest : MonoBehaviour
         if (existing != null)
         {
             string expectedPrefix = enemyType.ToString();
-            if (!existing.name.StartsWith(expectedPrefix))
+            // Special check for Bob since his name might differ from prefix "DragonBob"
+            bool matches = existing.name.StartsWith(expectedPrefix) || (enemyType == EnemyType.DragonBob && existing.name.StartsWith("Red"));
+            if (!matches)
             {
                 DestroyImmediate(existing.gameObject);
                 SpawnEnemy();
@@ -49,6 +53,7 @@ public class PointOfInterest : MonoBehaviour
             case EnemyType.Orc: prefab = orcPrefab; break;
             case EnemyType.TreasureChest: prefab = chestPrefab; break;
             case EnemyType.Mushroom: prefab = mushroomPrefab; break;
+            case EnemyType.DragonBob: prefab = dragonPrefab; break;
         }
 
         if (prefab == null) return;
@@ -56,11 +61,14 @@ public class PointOfInterest : MonoBehaviour
         GameObject enemy = Instantiate(prefab, transform.position, transform.rotation, transform);
         enemy.name = enemyType.ToString() + "_" + name;
         
-        // Reduce size by 25% (Scale 0.75)
-        enemy.transform.localScale = Vector3.one * 0.75f;
+        // Dragon doesn't need the 0.75 scaling or nav setup
+        if (enemyType != EnemyType.DragonBob)
+        {
+            enemy.transform.localScale = Vector3.one * 0.75f;
+        }
 
         // Setup CharacterStats if missing
-CharacterStats stats = enemy.GetComponent<CharacterStats>();
+        CharacterStats stats = enemy.GetComponent<CharacterStats>();
         if (stats == null) stats = enemy.AddComponent<CharacterStats>();
         
         // Base Stats setup
@@ -72,6 +80,15 @@ CharacterStats stats = enemy.GetComponent<CharacterStats>();
             stats.ResetStats();
             
             // Static enemies - disable navigation
+            var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
+            if (agent != null) agent.enabled = false;
+        }
+        else if (enemyType == EnemyType.DragonBob)
+        {
+            if (enemy.GetComponent<DragonBob>() == null)
+                enemy.AddComponent<DragonBob>();
+                
+            // Ensure no navmesh agent on dragon
             var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
             if (agent != null) agent.enabled = false;
         }
@@ -98,7 +115,8 @@ CharacterStats stats = enemy.GetComponent<CharacterStats>();
                 case EnemyType.Orc: height = 2.5f; break;
                 case EnemyType.Mushroom: height = 1.6f; break;
                 case EnemyType.TreasureChest: height = 1.8f; break;
-                }
+                case EnemyType.DragonBob: height = 4.0f; break;
+            }
             canvas.transform.localPosition = new Vector3(0, height, 0);
 
             var bar = canvas.GetComponentInChildren<HealthBar>();

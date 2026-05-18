@@ -38,7 +38,7 @@ public class DiceRollSystem : MonoBehaviour
 
     private List<GameObject> activeDice = new List<GameObject>();
     private List<Rigidbody> activeDiceRBs = new List<Rigidbody>();
-    private bool isRolling = false;
+    public bool isRolling = false;
     private GameObject worldDiceContainer;
 
     private void Start()
@@ -140,6 +140,8 @@ public class DiceRollSystem : MonoBehaviour
         }
     }
 
+    public static System.Action<int> OnAnyDiceRolled;
+
     public void Roll()
     {
         RefreshReferences(); 
@@ -186,7 +188,7 @@ public class DiceRollSystem : MonoBehaviour
         yield return new WaitForSeconds(0.45f);
 
         if (resultText != null) 
-{
+    {
             resultText.text = ""; 
             resultText.gameObject.SetActive(false);
         }
@@ -197,7 +199,7 @@ public class DiceRollSystem : MonoBehaviour
         activeDiceRBs.Clear();
 
         GameObject prefab = GetPrefabForType(diceType);
-if (prefab == null)
+    if (prefab == null)
         {
             Debug.LogError("[DiceRollSystem] No prefab found for " + diceType);
             isRolling = false;
@@ -205,6 +207,12 @@ if (prefab == null)
         }
 
         // 2. Spawn in World Space
+        if (worldDiceContainer == null)
+        {
+            worldDiceContainer = GameObject.Find("WorldDiceContainer");
+            if (worldDiceContainer == null) worldDiceContainer = new GameObject("WorldDiceContainer");
+        }
+
         for (int i = 0; i < amount; i++)
         {
             Vector3 spawnPos = transform.position + spawnOffset + Random.insideUnitSphere * 0.1f;
@@ -221,10 +229,10 @@ if (prefab == null)
 
             Rigidbody rb = die.GetComponent<Rigidbody>();
             if (rb == null) rb = die.AddComponent<Rigidbody>();
-activeDiceRBs.Add(rb);
+    activeDiceRBs.Add(rb);
 
             Debug.Log($"[DiceRollSystem] Spawning die {i} at {spawnPos} in world space.");
-rb.mass = 1.0f;
+    rb.mass = 1.0f;
             rb.linearDamping = 1.0f;
             rb.angularDamping = 1.0f;
 
@@ -248,7 +256,7 @@ rb.mass = 1.0f;
                 }
             }
             if (!stillMoving) break;
-timer += Time.deltaTime;
+    timer += Time.deltaTime;
             yield return null;
         }
 
@@ -289,6 +297,7 @@ timer += Time.deltaTime;
             StartCoroutine(AnimateFloatingText(resultText));
         }
 
+        OnAnyDiceRolled?.Invoke(total);
         if (heroNav != null) heroNav.OnDiceRolled(total);
 
         // 5. Cleanup Coroutine for this specific batch

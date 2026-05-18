@@ -76,10 +76,11 @@ if (hitEffectPrefab == null)
         Animator eAnim = enemy.GetComponent<Animator>();
         
         bool isStatic = enemy.name.Contains("Chest");
+        bool isDragon = enemy.name.Contains("DragonBob");
 
         // Set to run speed
         if (pAnim != null) pAnim.SafeSetFloat("Speed", 1.5f);
-        if (eAnim != null && !isStatic) eAnim.SafeSetFloat("Speed", 1.5f);
+        if (eAnim != null && !isStatic && !isDragon) eAnim.SafeSetFloat("Speed", 1.5f);
 
         float duration = 0.5f; // Faster charge
         float elapsed = 0;
@@ -96,10 +97,12 @@ if (hitEffectPrefab == null)
             playerStats.transform.position = Vector3.Lerp(pStart, playerTarget, curve);
             playerStats.transform.LookAt(new Vector3(enemyTarget.x, playerStats.transform.position.y, enemyTarget.z));
 
-            if (!isStatic)
+            if (!isStatic && !isDragon)
             {
                 enemy.transform.position = Vector3.Lerp(eStart, enemyTarget, curve);
             }
+            
+            // Dragon should look at player even if not moving position
             enemy.transform.LookAt(new Vector3(playerTarget.x, enemy.transform.position.y, playerTarget.z));
 
             yield return null;
@@ -107,13 +110,17 @@ if (hitEffectPrefab == null)
 
         // 4. Finalize position and rotation
         playerStats.transform.position = playerTarget;
-        enemy.transform.position = enemyTarget;
+        if (!isDragon) enemy.transform.position = enemyTarget;
         
         if (pAnim != null) pAnim.SafeSetFloat("Speed", 0f);
-        if (eAnim != null) eAnim.SafeSetFloat("Speed", 0f);
+        if (eAnim != null && !isDragon) eAnim.SafeSetFloat("Speed", 0f);
 
         // Visual "Ready" flinch
-        if (eAnim != null) eAnim.SafeSetTrigger("GetHit");
+        if (eAnim != null) 
+        {
+            if (isDragon) eAnim.CrossFade("Scream", 0.2f);
+            else eAnim.SafeSetTrigger("GetHit");
+        }
         if (pAnim != null) pAnim.SafeSetTrigger("GetHit");
 
         yield return new WaitForSeconds(0.2f);
@@ -209,15 +216,25 @@ yield return null;
         if (camFollow != null) camFollow.Shake(0.2f, isCritical ? 0.35f : 0.18f);
 
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
-        if (enemyAnim != null) enemyAnim.SafeSetTrigger("GetHit");
+        if (enemyAnim != null)
+        {
+            bool isDragon = currentEnemyStats.name.Contains("DragonBob");
+            if (isDragon) enemyAnim.CrossFade("Get Hit", 0.1f);
+            else enemyAnim.SafeSetTrigger("GetHit");
+        }
 
         // Recovery time
         yield return new WaitForSeconds(1.0f);
 
         if (currentEnemyStats != null && currentEnemyStats.currentHP <= 0)
         {
-            if (enemyAnim != null) enemyAnim.SafeSetTrigger("Die");
-yield return new WaitForSeconds(0.5f);
+            bool isDragon = currentEnemyStats.name.Contains("DragonBob");
+            if (enemyAnim != null)
+            {
+                if (isDragon) enemyAnim.CrossFade("Die", 0.1f);
+                else enemyAnim.SafeSetTrigger("Die");
+            }
+            yield return new WaitForSeconds(0.5f);
             EndCombat(true);
         }
         else
@@ -232,7 +249,17 @@ yield return new WaitForSeconds(0.5f);
         if (currentEnemyStats == null) yield break;
 
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
-        if (enemyAnim != null) enemyAnim.SafeSetTrigger("Attack");
+        bool isDragon = currentEnemyStats.name.Contains("DragonBob");
+
+        if (enemyAnim != null)
+        {
+            if (isDragon) 
+            {
+                string[] attacks = { "Flame Attack", "Claw Attack", "Basic Attack" };
+                enemyAnim.CrossFade(attacks[Random.Range(0, attacks.Length)], 0.2f);
+            }
+            else enemyAnim.SafeSetTrigger("Attack");
+        }
 
         // Wait for impact
         yield return new WaitForSeconds(0.35f);
@@ -259,6 +286,8 @@ yield return new WaitForSeconds(0.5f);
         if (playerAnim != null) playerAnim.SafeSetTrigger("GetHit");
 
         yield return new WaitForSeconds(1.0f);
+        
+        if (isDragon && enemyAnim != null) enemyAnim.CrossFade("Fly Float", 0.5f);
     }
 
     public void SpawnDamageText(Vector3 position, string text, Color color)
@@ -339,9 +368,14 @@ camFollow.target = playerStats.transform;
         {
             if (playerAnim != null) playerAnim.SafeSetTrigger("Victory");
             bool isChest = currentEnemyStats.name.Contains("TreasureChest") || currentEnemyStats.name.Contains("Chest");
+            bool isDragon = currentEnemyStats.name.Contains("DragonBob");
+
+            if (isChest) playerStats.AddGold(Random.Range(20, 51));
+            else if (isDragon) playerStats.AddGold(Random.Range(100, 201));
+            else playerStats.AddGold(Random.Range(5, 11)); // Orcs/Mushrooms
 
             // Allow movement to continue
-            GameObject.Destroy(currentEnemyStats.gameObject, 1.5f);
+            GameObject.Destroy(currentEnemyStats.gameObject, isDragon ? 3.0f : 1.5f);
             currentEnemyStats = null;
 
             if (isChest && TreasureUpgradeUI.Instance != null)

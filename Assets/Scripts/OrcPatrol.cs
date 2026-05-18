@@ -92,7 +92,7 @@ if (agent == null)
                 }
 
                 // Wait until reached
-                yield return new WaitUntil(() => !agent.pathPending && agent.remainingDistance <= agent.stoppingDistance);
+                yield return new WaitUntil(() => agent.isOnNavMesh && !agent.pathPending && agent.remainingDistance <= agent.stoppingDistance);
                 
                 // Idle pause
                 yield return new WaitForSeconds(waitTime);

@@ -13,8 +13,9 @@ public class CharacterStats : MonoBehaviour
     public int critThreshold = 11;
 
     [Header("Current State")]
-public float currentHP;
+    public float currentHP;
     public float currentMana;
+    public int coins;
     public bool isDead = false;
 
     [Header("Settings")]
@@ -85,6 +86,17 @@ public float currentHP;
         if (CombatSystem.Instance != null)
         {
             CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"+{amount} Mana", new Color(0.4f, 0.8f, 1f));
+        }
+    }
+
+    public void AddGold(int amount)
+    {
+        coins += amount;
+        Debug.Log($"[CharacterStats] Gained {amount} Gold. Total: {coins}");
+        
+        if (CombatSystem.Instance != null)
+        {
+            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.0f, $"+{amount} Gold", new Color(1f, 0.84f, 0f));
         }
     }
 
