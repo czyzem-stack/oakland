@@ -34,8 +34,15 @@ public class OrcPatrol : MonoBehaviour
 
     void Update()
     {
-        if (animator != null && agent != null && agent.enabled)
+        var stats = GetComponent<CharacterStats>();
+        if (stats != null && stats.isDead)
         {
+            if (agent != null && agent.enabled && agent.isOnNavMesh) agent.isStopped = true;
+            return;
+        }
+
+        if (animator != null && agent != null && agent.enabled)
+{
             float speed = agent.velocity.magnitude / agent.speed;
             animator.SetFloat("Speed", speed);
         }

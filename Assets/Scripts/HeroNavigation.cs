@@ -161,7 +161,7 @@ public class HeroNavigation : MonoBehaviour
         
         // Check for Enemy at POI
         CharacterStats enemyStats = currentTarget.GetComponentInChildren<CharacterStats>();
-        if (enemyStats != null)
+        if (enemyStats != null && !enemyStats.isDead)
         {
             StopMoving("Enemy Encountered");
             CombatSystem.Instance.StartCombat(enemyStats);

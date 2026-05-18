@@ -82,9 +82,9 @@ public class DiceRollSystem : MonoBehaviour
     {
         RefreshReferences(); 
 
-        if (isRolling) 
+        if (isRolling || IsSteveBusy()) 
         {
-            Debug.Log("[DiceRollSystem] Roll ignored - already rolling.");
+            Debug.Log("[DiceRollSystem] Roll ignored - Steve is busy.");
             return;
         }
         
@@ -99,6 +99,20 @@ public class DiceRollSystem : MonoBehaviour
         if (stats != null) stats.ConsumeMana(1);
 
         StartCoroutine(RollRoutine());
+    }
+
+    private bool IsSteveBusy()
+    {
+        if (heroNav != null && heroNav.isMoving) return true;
+        
+        if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
+        {
+            // If we are in combat, we are only "busy" if it's the enemy's turn 
+            // or if a player attack animation is already playing.
+            return !CombatSystem.Instance.isPlayerTurn || CombatSystem.Instance.IsAttackSequenceRunning;
+        }
+
+        return false;
     }
 
     private IEnumerator RollRoutine()

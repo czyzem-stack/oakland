@@ -19,16 +19,50 @@ public class CameraFollow : MonoBehaviour
     public float yaw = 0.0f;
     public float smoothSpeed = 0.125f;
 
+    [Header("Combat Polish")]
+    public bool isCombatOrbiting = false;
+    public float orbitSpeed = 40f; // Faster spin
+    private float combatOrbitYaw = 0f;
+
+    [Header("Juice")]
+    public float shakeDuration = 0f;
+    public float shakeMagnitude = 0.1f;
+    private Vector3 shakeOffset = Vector3.zero;
+
+    public void Shake(float duration, float magnitude)
+    {
+        shakeDuration = duration;
+        shakeMagnitude = magnitude;
+    }
+
     private void LateUpdate()
     {
         if (target == null) return;
+
+        // Handle Shake
+        if (shakeDuration > 0)
+        {
+            shakeOffset = Random.insideUnitSphere * shakeMagnitude;
+            shakeDuration -= Time.deltaTime;
+        }
+        else
+        {
+            shakeOffset = Vector3.zero;
+        }
 
         ApplyPresets();
 
         // Calculate rotation based on preset
         Quaternion targetRotation;
-        if (preset == CameraPreset.GodOfWar)
+        if (isCombatOrbiting && preset == CameraPreset.GodOfWar)
         {
+            combatOrbitYaw += orbitSpeed * Time.deltaTime;
+            // Tilt down more for combat showcase (pitch + 15)
+            targetRotation = Quaternion.Euler(pitch + 15f, target.eulerAngles.y + combatOrbitYaw, 0);
+        }
+        else if (preset == CameraPreset.GodOfWar)
+        {
+            combatOrbitYaw = yaw; // Reset orbit offset
             // For GoW, follow the target's yaw but keep fixed pitch
             targetRotation = Quaternion.Euler(pitch, target.eulerAngles.y + yaw, 0);
         }
@@ -43,10 +77,10 @@ public class CameraFollow : MonoBehaviour
         Vector3 desiredPosition = target.position + offset;
         
         // Smoothly move the camera
-        transform.position = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed);
+        transform.position = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed) + shakeOffset;
         
         // Always look at the target
-        transform.LookAt(target.position + Vector3.up * 1.5f); 
+transform.LookAt(target.position + Vector3.up * 1.5f); 
     }
 
     private void ApplyPresets()
@@ -59,8 +93,8 @@ public class CameraFollow : MonoBehaviour
                 yaw = 45.0f;
                 break;
             case CameraPreset.GodOfWar:
-                distance = 5.0f;
-                pitch = 15.0f;
+                distance = 6.0f;
+                pitch = 25.0f;
                 yaw = 0.0f;
                 break;
         }

@@ -11,6 +11,7 @@ public class CharacterStats : MonoBehaviour
     [Header("Current State")]
     public float currentHP;
     public float currentMana;
+    public bool isDead = false;
 
     [Header("Settings")]
     public int manaRegenPerInterval = 1;
@@ -69,7 +70,9 @@ public class CharacterStats : MonoBehaviour
 
     public void TakeDamage(float amount)
     {
+        if (isDead) return;
         currentHP = Mathf.Max(0, currentHP - amount);
+        if (currentHP <= 0) isDead = true;
     }
 }
 
