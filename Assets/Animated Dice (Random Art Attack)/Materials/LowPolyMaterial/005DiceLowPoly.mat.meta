@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: a278a8452d0c91842a462de30d23d8ef
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 142451
+  packageName: Animated Dice
+  packageVersion: 2.02
+  assetPath: Assets/Animated Dice (Random Art Attack)/Materials/LowPolyMaterial/005DiceLowPoly.mat
+  uploadId: 686965

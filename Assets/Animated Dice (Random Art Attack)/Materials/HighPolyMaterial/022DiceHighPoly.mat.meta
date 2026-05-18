@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: b2322ba879bdb6e47bf56dfcae91fd90
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 142451
+  packageName: Animated Dice
+  packageVersion: 2.02
+  assetPath: Assets/Animated Dice (Random Art Attack)/Materials/HighPolyMaterial/022DiceHighPoly.mat
+  uploadId: 686965

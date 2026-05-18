@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: ab581d117b3984740aee85de87dc7646
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 142451
+  packageName: Animated Dice
+  packageVersion: 2.02
+  assetPath: Assets/Animated Dice (Random Art Attack)/Materials/NumbersMaterial/NumbersPurplesAlpha.mat
+  uploadId: 686965

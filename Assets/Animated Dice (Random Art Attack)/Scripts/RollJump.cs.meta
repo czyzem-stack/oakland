@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 7ceac41478f8fcc4e92008d3363c9d40
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 142451
+  packageName: Animated Dice
+  packageVersion: 2.02
+  assetPath: Assets/Animated Dice (Random Art Attack)/Scripts/RollJump.cs
+  uploadId: 686965

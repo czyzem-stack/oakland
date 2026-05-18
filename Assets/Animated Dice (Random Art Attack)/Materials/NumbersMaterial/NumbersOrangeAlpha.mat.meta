@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 85edbd520d094c5468b5f0297c4dddd1
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 142451
+  packageName: Animated Dice
+  packageVersion: 2.02
+  assetPath: Assets/Animated Dice (Random Art Attack)/Materials/NumbersMaterial/NumbersOrangeAlpha.mat
+  uploadId: 686965
