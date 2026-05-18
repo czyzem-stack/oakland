@@ -31,88 +31,135 @@ public class DiceRollSystem : MonoBehaviour
     public List<GameObject> dicePrefabs = new List<GameObject>();
     public List<Material> diceMaterials = new List<Material>();
     public Text resultText;
+    public Animator steveAnimator;
+    public HeroNavigation heroNav;
 
     private List<GameObject> activeDice = new List<GameObject>();
     private bool isRolling = false;
 
+    private void Start()
+    {
+        CleanupHierarchy();
+        RefreshReferences();
+    }
+
+    private void CleanupHierarchy()
+    {
+        // Remove any leftover dice children
+        foreach (Transform child in transform)
+        {
+            Destroy(child.gameObject);
+        }
+        activeDice.Clear();
+    }
+
+    private void RefreshReferences()
+    {
+        if (steveAnimator == null)
+        {
+            steveAnimator = GetComponentInParent<Animator>();
+            if (steveAnimator == null) steveAnimator = GetComponentInChildren<Animator>();
+        }
+
+        if (heroNav == null)
+        {
+            heroNav = GetComponentInParent<HeroNavigation>();
+            if (heroNav == null) heroNav = GetComponentInChildren<HeroNavigation>();
+        }
+    }
+
     public void Roll()
     {
-        if (isRolling) return;
+        RefreshReferences(); 
+
+        if (isRolling) 
+        {
+            Debug.Log("[DiceRollSystem] Roll ignored - already rolling.");
+            return;
+        }
+        
+        if (steveAnimator != null)
+        {
+            steveAnimator.SetTrigger("Roll");
+        }
+
         StartCoroutine(RollRoutine());
     }
 
     private IEnumerator RollRoutine()
     {
+        Debug.Log("[DiceRollSystem] RollRoutine started.");
         isRolling = true;
+
         if (resultText != null) 
         {
             resultText.text = ""; 
             resultText.gameObject.SetActive(false);
         }
 
-        foreach (var die in activeDice)
-        {
-            if (die != null) Destroy(die);
-        }
-        activeDice.Clear();
+        // 1. Cleanup
+        CleanupHierarchy();
 
         GameObject prefab = GetPrefabForType(diceType);
         if (prefab == null)
         {
-            Debug.LogError("No prefab assigned for " + diceType);
+            Debug.LogError("[DiceRollSystem] No prefab found for " + diceType);
             isRolling = false;
             yield break;
         }
 
+        // 2. Spawn
         for (int i = 0; i < amount; i++)
         {
-            GameObject die = Instantiate(prefab, transform.position + spawnOffset + Random.insideUnitSphere * 0.3f, Random.rotation);
+            Vector3 spawnPos = transform.position + spawnOffset + Random.insideUnitSphere * 0.1f;
+            GameObject die = Instantiate(prefab, spawnPos, Random.rotation, transform); // Added 'transform' as parent
             die.transform.localScale = Vector3.one * scale;
             activeDice.Add(die);
+            Debug.Log($"[DiceRollSystem] Spawning die {i} at {spawnPos} (Scale: {scale})");
 
             if (diceMaterial != null)
             {
                 var renderers = die.GetComponentsInChildren<MeshRenderer>();
-                foreach (var r in renderers) r.material = diceMaterial;
+                foreach (var r in renderers) r.sharedMaterial = diceMaterial;
             }
 
             Rigidbody rb = die.GetComponent<Rigidbody>();
             if (rb == null) rb = die.AddComponent<Rigidbody>();
             rb.mass = 1.0f;
-            rb.linearDamping = 0.5f;
-            rb.angularDamping = 0.5f;
+            rb.linearDamping = 1.0f;
+            rb.angularDamping = 1.0f;
 
-            rb.AddForce((Vector3.up + Random.insideUnitSphere * 0.2f) * popForce, ForceMode.Impulse);
-            rb.AddTorque(new Vector3(Random.value, Random.value, Random.value) * torqueForce, ForceMode.Impulse);
+            rb.AddForce((Vector3.up + Random.insideUnitSphere * 0.1f) * popForce, ForceMode.Impulse);
+            rb.AddTorque(Random.insideUnitSphere * torqueForce, ForceMode.Impulse);
         }
 
+        // 3. Wait
         yield return new WaitForSeconds(0.5f);
         
         float timer = 0;
-        bool allStopped = false;
-        while (!allStopped && timer < 2.0f)
+        while (timer < 1.5f)
         {
-            allStopped = true;
+            bool stillMoving = false;
             foreach (var die in activeDice)
             {
-                if (die != null && die.GetComponent<Rigidbody>().linearVelocity.magnitude > 0.1f)
+                if (die != null && die.GetComponent<Rigidbody>().linearVelocity.magnitude > 0.2f)
                 {
-                    allStopped = false;
+                    stillMoving = true;
                     break;
                 }
             }
+            if (!stillMoving) break;
             timer += Time.deltaTime;
             yield return null;
         }
 
+        // 4. Result
         int total = 0;
         foreach (var die in activeDice)
         {
             if (die != null)
             {
-                DiceStats stats = die.GetComponent<DiceStats>();
-                if (stats == null) stats = die.GetComponentInChildren<DiceStats>();
-                
+                DiceStats stats = die.GetComponent<DiceStats>() ?? die.GetComponentInChildren<DiceStats>();
                 if (stats != null)
                 {
                     int val = stats.side;
@@ -128,8 +175,11 @@ public class DiceRollSystem : MonoBehaviour
             resultText.text = total.ToString();
             StartCoroutine(AnimateFloatingText(resultText));
         }
-        
+
+        if (heroNav != null) heroNav.OnDiceRolled(total);
+
         isRolling = false;
+        Debug.Log("[DiceRollSystem] RollRoutine finished.");
     }
 
     private IEnumerator AnimateFloatingText(Text text)
