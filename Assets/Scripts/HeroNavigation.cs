@@ -49,7 +49,6 @@ public float remainingMeters = 0f;
 
     void Update()
     {
-        EnsureComponents();
         if (agent == null) return;
 
         // Skip animation syncing if in combat - let CombatSystem control it

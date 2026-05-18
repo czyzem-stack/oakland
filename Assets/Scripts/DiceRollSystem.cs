@@ -37,6 +37,7 @@ public class DiceRollSystem : MonoBehaviour
     public HeroNavigation heroNav;
 
     private List<GameObject> activeDice = new List<GameObject>();
+    private List<Rigidbody> activeDiceRBs = new List<Rigidbody>();
     private bool isRolling = false;
     private GameObject worldDiceContainer;
 
@@ -162,9 +163,10 @@ public class DiceRollSystem : MonoBehaviour
         // 1. Mark old dice for immediate destruction or let them fade out naturally
         // We'll let old ones fade out and clear the list for new ones
         activeDice.Clear();
+        activeDiceRBs.Clear();
 
         GameObject prefab = GetPrefabForType(diceType);
-        if (prefab == null)
+if (prefab == null)
         {
             Debug.LogError("[DiceRollSystem] No prefab found for " + diceType);
             isRolling = false;
@@ -179,17 +181,13 @@ public class DiceRollSystem : MonoBehaviour
             GameObject die = Instantiate(prefab, spawnPos, Random.rotation, worldDiceContainer.transform); 
             die.transform.localScale = Vector3.one * scale;
             activeDice.Add(die);
-            Debug.Log($"[DiceRollSystem] Spawning die {i} at {spawnPos} in world space.");
-
-            if (diceMaterial != null)
-            {
-                var renderers = die.GetComponentsInChildren<MeshRenderer>();
-                foreach (var r in renderers) r.sharedMaterial = diceMaterial;
-            }
-
+            
             Rigidbody rb = die.GetComponent<Rigidbody>();
             if (rb == null) rb = die.AddComponent<Rigidbody>();
-            rb.mass = 1.0f;
+            activeDiceRBs.Add(rb);
+
+            Debug.Log($"[DiceRollSystem] Spawning die {i} at {spawnPos} in world space.");
+rb.mass = 1.0f;
             rb.linearDamping = 1.0f;
             rb.angularDamping = 1.0f;
 
@@ -204,16 +202,16 @@ public class DiceRollSystem : MonoBehaviour
         while (timer < 1.5f)
         {
             bool stillMoving = false;
-            foreach (var die in activeDice)
+            foreach (var rb in activeDiceRBs)
             {
-                if (die != null && die.GetComponent<Rigidbody>().linearVelocity.magnitude > 0.2f)
+                if (rb != null && rb.linearVelocity.magnitude > 0.2f)
                 {
                     stillMoving = true;
                     break;
                 }
             }
             if (!stillMoving) break;
-            timer += Time.deltaTime;
+timer += Time.deltaTime;
             yield return null;
         }
 

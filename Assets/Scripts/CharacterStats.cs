@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 public class CharacterStats : MonoBehaviour
 {
@@ -32,26 +33,32 @@ public class CharacterStats : MonoBehaviour
         ResetStats();
     }
 
-    private void Update()
+    private void Start()
     {
-        // Periodic Regeneration
-        if (currentMana < MaxMana)
+        StartCoroutine(RegenRoutine());
+    }
+
+    private IEnumerator RegenRoutine()
+    {
+        while (!isDead)
         {
-            regenTimer += Time.deltaTime;
-            if (regenTimer >= regenInterval)
+            if (currentMana < MaxMana)
             {
-                RegenerateMana(manaRegenPerInterval);
-                regenTimer = 0f;
+                yield return new WaitForSeconds(regenInterval);
+                if (!isDead)
+                {
+                    RegenerateMana(manaRegenPerInterval);
+                }
             }
-        }
-        else
-        {
-            regenTimer = 0f;
+            else
+            {
+                yield return new WaitForSeconds(1.0f);
+            }
         }
     }
 
     public void ResetStats()
-    {
+{
         currentHP = MaxHP;
         currentMana = MaxMana;
     }

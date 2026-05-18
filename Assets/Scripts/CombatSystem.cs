@@ -27,9 +27,15 @@ public class CombatSystem : MonoBehaviour
     }
 
     private Transform combatCameraAnchor;
+    private CameraFollow camFollow;
+
+    private void Start()
+    {
+        if (Camera.main != null) camFollow = Camera.main.GetComponent<CameraFollow>();
+    }
 
     public void StartCombat(CharacterStats enemy)
-    {
+{
         if (isInCombat || enemy == null || enemy.isDead) return;
 
         currentEnemyStats = enemy;
@@ -67,16 +73,13 @@ public class CombatSystem : MonoBehaviour
         Animator pAnim = playerStats.GetComponent<Animator>();
         Animator eAnim = enemy.GetComponent<Animator>();
         
-        // Only "run" if the enemy isn't a chest (chests don't have OrcPatrol or are static)
         bool isStatic = enemy.name.Contains("Chest");
 
-        if (pAnim != null) pAnim.SetFloat("Speed", 1f);
-        if (eAnim != null && !isStatic) eAnim.SetFloat("Speed", 1f);
+        // Set to run speed
+        if (pAnim != null) pAnim.SetFloat("Speed", 1.5f);
+        if (eAnim != null && !isStatic) eAnim.SetFloat("Speed", 1.5f);
 
-        // Optional: Taunt/Reaction trigger
-        if (eAnim != null) eAnim.SetTrigger("GetHit"); // "GetHit" often looks like a flinch/ready stance in these packs
-
-        float duration = 0.6f;
+        float duration = 0.5f; // Faster charge
         float elapsed = 0;
         Vector3 pStart = playerStats.transform.position;
         Vector3 eStart = enemy.transform.position;
@@ -85,7 +88,8 @@ public class CombatSystem : MonoBehaviour
         {
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
-            float curve = t * (2 - t); // Simple ease out
+            // Punchy ease-in ease-out
+            float curve = t * t * (3 - 2 * t); 
 
             playerStats.transform.position = Vector3.Lerp(pStart, playerTarget, curve);
             playerStats.transform.LookAt(new Vector3(enemyTarget.x, playerStats.transform.position.y, enemyTarget.z));
@@ -106,12 +110,17 @@ public class CombatSystem : MonoBehaviour
         if (pAnim != null) pAnim.SetFloat("Speed", 0f);
         if (eAnim != null) eAnim.SetFloat("Speed", 0f);
 
+        // Visual "Ready" flinch
+        if (eAnim != null) eAnim.SetTrigger("GetHit");
+        if (pAnim != null) pAnim.SetTrigger("GetHit");
+
+        yield return new WaitForSeconds(0.2f);
+
         // 5. Dynamic Camera Setup
-        var camFollow = Camera.main.GetComponent<CameraFollow>();
         if (camFollow != null)
         {
             if (combatCameraAnchor == null) combatCameraAnchor = new GameObject("CombatCameraAnchor").transform;
-            combatCameraAnchor.position = (playerStats.transform.position + enemy.transform.position) * 0.5f;
+combatCameraAnchor.position = (playerStats.transform.position + enemy.transform.position) * 0.5f;
             camFollow.target = combatCameraAnchor;
             camFollow.isCombatOrbiting = true;
         }
@@ -131,12 +140,11 @@ public class CombatSystem : MonoBehaviour
             }
             else
             {
-                yield return new WaitForSeconds(1f);
-                if (!isInCombat) break; // Check again after wait
+                yield return new WaitForSeconds(0.5f);
+                if (!isInCombat) break;
 
                 Debug.Log("[CombatSystem] Enemy Turn...");
-                EnemyAttack();
-                yield return new WaitForSeconds(2f);
+                yield return StartCoroutine(EnemyAttackSequence());
                 
                 if (!isInCombat) break;
 
@@ -149,7 +157,7 @@ public class CombatSystem : MonoBehaviour
                     isPlayerTurn = true;
                 }
             }
-            yield return null;
+yield return null;
         }
     }
 
@@ -167,23 +175,20 @@ public class CombatSystem : MonoBehaviour
     {
         isAttackSequenceRunning = true;
         
-        // Check for Critical Hit (Natural 11 or 12 if using 2D6)
         bool isCritical = rollValue >= 11; 
         
-        // Player attack animation
         Animator playerAnim = playerStats.GetComponent<Animator>();
         if (playerAnim != null) playerAnim.SetTrigger("Attack");
 
-        yield return new WaitForSeconds(0.5f);
+        // Faster impact timing (snappier)
+        yield return new WaitForSeconds(0.35f);
 
-        // Check if enemy still exists
         if (currentEnemyStats == null) 
         {
             isAttackSequenceRunning = false;
             yield break;
         }
 
-        // Deal damage
         int baseDamage = rollValue + playerStats.MeleeDamage;
         int finalDamage = isCritical ? baseDamage * 2 : baseDamage;
         
@@ -193,26 +198,24 @@ public class CombatSystem : MonoBehaviour
         Color textColor = isCritical ? Color.yellow : Color.red;
         SpawnDamageText(currentEnemyStats.transform.position + Vector3.up * 2f, $"{damagePrefix}{finalDamage}", textColor);
         
-        Debug.Log($"[CombatSystem] Player deals {finalDamage} damage to Enemy (Crit: {isCritical}).");
-
-        // Juice: VFX
         if (hitEffectPrefab != null)
         {
             GameObject fx = Instantiate(hitEffectPrefab, currentEnemyStats.transform.position + Vector3.up * 1.5f, Quaternion.identity);
             Destroy(fx, 2f);
         }
 
-        // Juice: Camera Shake
-        Camera.main.GetComponent<CameraFollow>()?.Shake(0.2f, isCritical ? 0.3f : 0.15f);
+        if (camFollow != null) camFollow.Shake(0.2f, isCritical ? 0.35f : 0.18f);
 
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
-        if (enemyAnim != null) enemyAnim.SetTrigger("GetHit");
+if (enemyAnim != null) enemyAnim.SetTrigger("GetHit");
 
-        yield return new WaitForSeconds(1.5f);
+        // Recovery time
+        yield return new WaitForSeconds(1.0f);
 
         if (currentEnemyStats != null && currentEnemyStats.currentHP <= 0)
         {
             if (enemyAnim != null) enemyAnim.SetTrigger("Die");
+            yield return new WaitForSeconds(0.5f);
             EndCombat(true);
         }
         else
@@ -222,14 +225,16 @@ public class CombatSystem : MonoBehaviour
         isAttackSequenceRunning = false;
     }
 
-    private void EnemyAttack()
+    private IEnumerator EnemyAttackSequence()
     {
-        if (currentEnemyStats == null) return;
+        if (currentEnemyStats == null) yield break;
 
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
         if (enemyAnim != null) enemyAnim.SetTrigger("Attack");
 
-        // Enemy damage (simulated roll for now)
+        // Wait for impact
+        yield return new WaitForSeconds(0.35f);
+
         int enemyRoll = Random.Range(1, 13);
         bool isCritical = enemyRoll >= 11;
         int damage = enemyRoll + currentEnemyStats.MeleeDamage;
@@ -239,20 +244,19 @@ public class CombatSystem : MonoBehaviour
         
         string damagePrefix = isCritical ? "CRITICAL! -" : "-";
         SpawnDamageText(playerStats.transform.position + Vector3.up * 2f, $"{damagePrefix}{damage}", Color.red);
-        Debug.Log($"[CombatSystem] Enemy deals {damage} damage to Player (Crit: {isCritical}).");
-
-        // Juice: VFX
+        
         if (hitEffectPrefab != null)
         {
             GameObject fx = Instantiate(hitEffectPrefab, playerStats.transform.position + Vector3.up * 1.5f, Quaternion.identity);
             Destroy(fx, 2f);
         }
 
-        // Juice: Camera Shake
-        Camera.main.GetComponent<CameraFollow>()?.Shake(0.2f, isCritical ? 0.25f : 0.1f);
+        if (camFollow != null) camFollow.Shake(0.2f, isCritical ? 0.25f : 0.12f);
 
         Animator playerAnim = playerStats.GetComponent<Animator>();
-        if (playerAnim != null) playerAnim.SetTrigger("GetHit");
+if (playerAnim != null) playerAnim.SetTrigger("GetHit");
+
+        yield return new WaitForSeconds(1.0f);
     }
 
     public void SpawnDamageText(Vector3 position, string text, Color color)
@@ -309,11 +313,10 @@ canvasGo.transform.position = position + Vector3.up * 0.5f; // Initial offset
         }
 
         // Reset Camera
-        var camFollow = Camera.main.GetComponent<CameraFollow>();
         if (camFollow != null) 
         {
             camFollow.isCombatOrbiting = false;
-            camFollow.target = playerStats.transform;
+camFollow.target = playerStats.transform;
             if (combatCameraAnchor != null) {
                 Destroy(combatCameraAnchor.gameObject);
                 combatCameraAnchor = null;

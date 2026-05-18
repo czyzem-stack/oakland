@@ -9,13 +9,15 @@ public class OrcPatrol : MonoBehaviour
     
     private NavMeshAgent agent;
     private Animator animator;
+    private CharacterStats characterStats;
     private Vector3 startPosition;
     private bool isPatrolling = true;
 
     void Start()
     {
         agent = GetComponent<NavMeshAgent>();
-        if (agent == null)
+        characterStats = GetComponent<CharacterStats>();
+if (agent == null)
         {
             agent = gameObject.AddComponent<NavMeshAgent>();
         }
@@ -42,15 +44,14 @@ public class OrcPatrol : MonoBehaviour
 
     void Update()
     {
-        var stats = GetComponent<CharacterStats>();
-        if (stats != null && stats.isDead)
+        if (characterStats != null && characterStats.isDead)
         {
             if (agent != null && agent.enabled && agent.isOnNavMesh) agent.isStopped = true;
             return;
         }
 
         // Engage/Disengage logic
-        bool isInActiveCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat && CombatSystem.Instance.currentEnemyStats == stats;
+        bool isInActiveCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat && CombatSystem.Instance.currentEnemyStats == characterStats;
 
         if (isInActiveCombat)
         {
