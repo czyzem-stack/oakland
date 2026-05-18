@@ -7,15 +7,16 @@ public class DragonBob : MonoBehaviour
     public enum BobState { Flying, Landing, Resting, TakingOff, InCombat }
 
     [Header("Flight Settings")]
-    public float flyHeight = 12f;
-    public float flySpeed = 6f;
-    public float rotateSpeed = 2f;
-    public float arrivalDistance = 2.5f;
+    public float flyHeight = 8f; // Lowered for more presence and better shadows
+    public float flySpeed = 8f; // Faster movement
+    public float rotateSpeed = 3f;
+    public float arrivalDistance = 3.0f;
 
     [Header("Behavior")]
-    public int minRestTurns = 1;
-    public int maxRestTurns = 3;
-    public float combatEngagementChance = 0.3f;
+    public int minRestTurns = 0; 
+    public int maxRestTurns = 2;
+    public float combatEngagementChance = 0.4f;
+    public float flyOverPlayerChance = 0.6f; // High chance to target area near player
 
     private List<Transform> poiList = new List<Transform>();
     private Transform targetPOI;
@@ -33,6 +34,9 @@ public class DragonBob : MonoBehaviour
         stats = GetComponent<CharacterStats>();
         playerNav = Object.FindAnyObjectByType<HeroNavigation>();
 
+        // Increase scale for BOSS presence
+        transform.localScale = Vector3.one * 2.2f;
+
         // Find all POIs
         var pois = Object.FindObjectsByType<PointOfInterest>(FindObjectsInactive.Include);
         foreach (var poi in pois)
@@ -42,17 +46,16 @@ public class DragonBob : MonoBehaviour
 
         if (stats != null)
         {
-            stats.brawn = 25;
-            stats.grit = 20;
+            stats.brawn = 40;
+            stats.grit = 30;
             stats.finesse = 15;
             stats.ResetStats();
         }
 
         DiceRollSystem.OnAnyDiceRolled += HandleDiceRoll;
         
-        // Start high up if not already
-        if (transform.position.y < flyHeight)
-            transform.position += Vector3.up * flyHeight;
+        // Start high up
+        transform.position = new Vector3(transform.position.x, flyHeight, transform.position.z);
 
         PickNewTargetPOI();
         SetState(BobState.Flying);
@@ -79,7 +82,6 @@ public class DragonBob : MonoBehaviour
         }
         else if (currentState == BobState.InCombat)
         {
-            // Recover from combat
             SetState(BobState.TakingOff);
             return;
         }
@@ -120,7 +122,6 @@ public class DragonBob : MonoBehaviour
                 animator.CrossFade("Land", 0.3f);
                 break;
             case BobState.Resting:
-                // Randomize rest animation
                 float r = Random.value;
                 string idleAnim = r > 0.6f ? "Idle01" : (r > 0.3f ? "Idle02" : "Sleep");
                 animator.CrossFade(idleAnim, 1.0f);
@@ -136,7 +137,11 @@ public class DragonBob : MonoBehaviour
 
     private void FlyToPOI()
     {
-        if (targetPOI == null) return;
+        if (targetPOI == null) 
+        {
+            PickNewTargetPOI();
+            return;
+        }
 
         Vector3 targetPos = targetPOI.position + Vector3.up * flyHeight;
         Vector3 direction = (targetPos - transform.position).normalized;
@@ -149,12 +154,12 @@ public class DragonBob : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * rotateSpeed);
         }
 
-        // Randomly glide or scream during flight
-        if (stateTimer > 5f)
+        // Randomly glide or scream during flight for DEPTH
+        if (stateTimer > 3f)
         {
             float r = Random.value;
-            if (r < 0.005f) animator.CrossFade("Fly Glide", 1.5f);
-            else if (r < 0.008f) animator.CrossFade("Scream", 0.5f);
+            if (r < 0.01f) animator.CrossFade("Fly Glide", 1.5f);
+            else if (r < 0.015f) animator.CrossFade("Scream", 0.5f);
         }
 
         if (Vector3.Distance(transform.position, targetPos) < arrivalDistance)
@@ -165,14 +170,18 @@ public class DragonBob : MonoBehaviour
 
     private void LandingLogic()
     {
-        if (targetPOI == null) return;
+        if (targetPOI == null) 
+        {
+            SetState(BobState.TakingOff);
+            return;
+        }
 
         Vector3 targetPos = targetPOI.position;
         targetPos.y += 0.5f; 
 
-        transform.position = Vector3.MoveTowards(transform.position, targetPos, flySpeed * 0.5f * Time.deltaTime);
+        transform.position = Vector3.MoveTowards(transform.position, targetPos, flySpeed * 0.6f * Time.deltaTime);
         
-        if (Vector3.Distance(transform.position, targetPos) < 0.6f)
+        if (Vector3.Distance(transform.position, targetPos) < 1.0f)
         {
             SetState(BobState.Resting);
             restTurnsRemaining = Random.Range(minRestTurns, maxRestTurns + 1);
@@ -183,7 +192,7 @@ public class DragonBob : MonoBehaviour
 
     private void RestingLogic()
     {
-        if (stateTimer > 15f)
+        if (stateTimer > 12f)
         {
             stateTimer = 0f;
             float r = Random.value;
@@ -199,7 +208,7 @@ public class DragonBob : MonoBehaviour
     private void TakingOffLogic()
     {
         Vector3 targetPos = transform.position + Vector3.up * flyHeight;
-        transform.position = Vector3.MoveTowards(transform.position, targetPos, flySpeed * 0.4f * Time.deltaTime);
+        transform.position = Vector3.MoveTowards(transform.position, targetPos, flySpeed * 0.5f * Time.deltaTime);
 
         if (Vector3.Distance(transform.position, targetPos) < 1f)
         {
@@ -215,8 +224,6 @@ public class DragonBob : MonoBehaviour
         if (currentState == BobState.Resting)
         {
             restTurnsRemaining--;
-            Debug.Log($"[DragonBob] Turn passed. {restTurnsRemaining} rest turns left at {targetPOI.name}.");
-            
             if (restTurnsRemaining <= 0)
             {
                 SetState(BobState.TakingOff);
@@ -235,7 +242,7 @@ public class DragonBob : MonoBehaviour
         float distToPlayer = Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z), 
                                             new Vector3(playerNav.transform.position.x, 0, playerNav.transform.position.z));
         
-        if (distToPlayer < 8.0f) 
+        if (distToPlayer < 12.0f) 
         {
             if (Random.value < combatEngagementChance)
             {
@@ -250,6 +257,27 @@ public class DragonBob : MonoBehaviour
         if (poiList.Count == 0) return;
         
         Transform oldTarget = targetPOI;
+
+        // Strategy: 60% chance to pick a POI near the player to "fly over" them
+        if (playerNav != null && Random.value < flyOverPlayerChance)
+        {
+            List<Transform> nearbyPOIs = new List<Transform>();
+            foreach (var poi in poiList)
+            {
+                if (Vector3.Distance(poi.position, playerNav.transform.position) < 35f)
+                {
+                    nearbyPOIs.Add(poi);
+                }
+            }
+
+            if (nearbyPOIs.Count > 0)
+            {
+                targetPOI = nearbyPOIs[Random.Range(0, nearbyPOIs.Count)];
+                return;
+            }
+        }
+
+        // Default random pick
         int safety = 0;
         while ((targetPOI == oldTarget || targetPOI == null) && poiList.Count > 1 && safety < 10)
         {
