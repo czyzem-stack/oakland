@@ -38,25 +38,37 @@ public class Coin : MonoBehaviour
         transform.position = new Vector3(transform.position.x, newY, transform.position.z);
     }
 
+    private bool isCollected = false;
+
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Player") || other.GetComponent<HeroNavigation>() != null)
+        if (isCollected) return;
+
+        HeroNavigation hero = other.GetComponent<HeroNavigation>();
+        if (hero == null) hero = other.GetComponentInParent<HeroNavigation>();
+
+        if (other.CompareTag("Player") || hero != null)
         {
-            Collect();
+            isCollected = true;
+            Collect(hero);
         }
     }
 
-    public void Collect()
+    public void Collect(HeroNavigation hero = null)
     {
-        HeroNavigation hero = Object.FindAnyObjectByType<HeroNavigation>();
+        if (hero == null) hero = Object.FindAnyObjectByType<HeroNavigation>();
         CharacterStats stats = hero?.GetComponent<CharacterStats>();
         if (stats != null)
         {
             stats.AddGold(1);
             hero.TrySpawnWorm(transform.position);
+            Debug.Log($"[Coin] Collected by {hero.name}. New Gold: {stats.coins}");
+        }
+        else
+        {
+            Debug.LogWarning("[Coin] Collected but CharacterStats not found!");
         }
 
-        // Play a sound if we had one, for now just destroy
         Destroy(gameObject);
     }
 }

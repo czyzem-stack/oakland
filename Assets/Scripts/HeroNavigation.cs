@@ -157,33 +157,93 @@ public class HeroNavigation : MonoBehaviour
 
     private void SpawnCoinsAlongPath()
     {
-        if (coinPrefab == null || agent == null || currentTarget == null) return;
+        if (coinPrefab == null || agent == null || currentTarget == null) 
+        {
+            Debug.LogWarning($"[HeroNavigation] Cannot spawn coins. Prefab: {coinPrefab != null}, Agent: {agent != null}, Target: {currentTarget != null}");
+            return;
+        }
+        
         spawnedCoinsForCurrentTarget = true;
         NavMeshPath path = new NavMeshPath();
-        if (agent.CalculatePath(currentTarget.position, path))
+        
+        // Use NavMesh.CalculatePath instead of agent.CalculatePath for better robustness
+        Vector3 startPos = transform.position;
+        if (!agent.isOnNavMesh)
+        {
+            if (NavMesh.SamplePosition(transform.position, out NavMeshHit startHit, 5.0f, NavMesh.AllAreas))
+                startPos = startHit.position;
+        }
+
+        Vector3 targetPos = currentTarget.position;
+        if (NavMesh.SamplePosition(targetPos, out NavMeshHit endHit, 5.0f, NavMesh.AllAreas))
+            targetPos = endHit.position;
+
+        if (NavMesh.CalculatePath(startPos, targetPos, NavMesh.AllAreas, path))
         {
             float currentDist = 0;
-            float coinInterval = 2.5f; 
-            float nextCoinDist = 2.0f; 
-            int safetyBreak = 0;
+            float coinInterval = 5.0f; // Every other step (2.5m * 2)
+            float nextCoinDist = 5.0f; 
+            int spawnedCount = 0;
+            int totalIterations = 0;
+            List<Vector3> spawnedPositions = new List<Vector3>();
+
             for (int i = 0; i < path.corners.Length - 1; i++)
             {
-                Vector3 start = path.corners[i]; Vector3 end = path.corners[i + 1];
+                Vector3 start = path.corners[i]; 
+                Vector3 end = path.corners[i + 1];
                 float segmentLen = Vector3.Distance(start, end);
+
                 while (currentDist + segmentLen >= nextCoinDist)
                 {
-                    if (safetyBreak++ > 1000) break;
+                    totalIterations++;
+                    if (totalIterations > 1000) break;
+
                     float t = (nextCoinDist - currentDist) / segmentLen;
-                    Vector3 spawnPos = Vector3.Lerp(start, end, t);
-                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, NavMesh.AllAreas)) spawnPos = hit.position + Vector3.up * 0.7f;
-                    GameObject coin = Instantiate(coinPrefab, spawnPos, Quaternion.identity);
-                    coin.transform.localScale = Vector3.one * 6f; 
-                    if (coin.GetComponent<Coin>() == null) coin.AddComponent<Coin>();
+                    Vector3 spawnPos = Vector3.Lerp(start, end, Mathf.Clamp01(t));
+                    
+                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, NavMesh.AllAreas)) 
+                        spawnPos = hit.position + Vector3.up * 0.7f;
+                    else
+                        spawnPos.y += 0.7f;
+
+                    // Prevent spawning too close to Steve
+                    if (Vector3.Distance(spawnPos, transform.position) < 2.0f) {
+                        nextCoinDist += coinInterval;
+                        continue;
+                    }
+
+                    // Double check for nearby newly spawned coins in this batch
+                    bool tooClose = false;
+                    foreach (var pos in spawnedPositions) {
+                        if (Vector3.Distance(spawnPos, pos) < 3.0f) { tooClose = true; break; }
+                    }
+
+                    if (!tooClose) {
+                        // Check for existing coins in the world
+                        Collider[] existing = Physics.OverlapSphere(spawnPos, 1.5f);
+                        foreach (var col in existing) {
+                            if (col.GetComponent<Coin>() != null) { tooClose = true; break; }
+                        }
+                    }
+
+                    if (!tooClose) {
+                        GameObject coin = Instantiate(coinPrefab, spawnPos, Quaternion.identity);
+                        coin.transform.localScale = Vector3.one * 6f; 
+                        if (coin.GetComponent<Coin>() == null) coin.AddComponent<Coin>();
+                        spawnedPositions.Add(spawnPos);
+                        spawnedCount++;
+                    }
+                    
                     nextCoinDist += coinInterval;
                 }
                 currentDist += segmentLen;
-                if (safetyBreak > 1000) break;
+                if (totalIterations > 1000) break;
             }
+Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {currentTarget.name}. Status: {path.status}");
+        }
+        else
+        {
+            Debug.LogError($"[HeroNavigation] NavMesh.CalculatePath failed from {startPos} to {targetPos}!");
         }
     }
 

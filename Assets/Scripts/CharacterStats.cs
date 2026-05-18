@@ -62,9 +62,10 @@ public class CharacterStats : MonoBehaviour
     }
 
     public void ResetStats()
-{
+    {
         currentHP = MaxHP;
         currentMana = MaxMana;
+        isDead = false;
     }
 
     public void ConsumeMana(int amount)

@@ -41,19 +41,23 @@ public class DiceRollSystem : MonoBehaviour
     public bool isRolling = false;
     private GameObject worldDiceContainer;
 
+    public static bool WarmedUp = false;
+
     private void Start()
     {
         CleanupHierarchy();
         RefreshReferences();
-        StartCoroutine(WarmupRoutine());
+        if (!WarmedUp)
+        {
+            StartCoroutine(WarmupRoutine());
+        }
     }
 
     private IEnumerator WarmupRoutine()
     {
+        WarmedUp = true;
         Debug.Log("[DiceRollSystem] Starting Warmup...");
-        List<GameObject> tempObjects = new List<GameObject>();
-
-        if (LoadingScreenUI.Instance != null) LoadingScreenUI.Instance.SetProgress(0.05f);
+List<GameObject> tempObjects = new List<GameObject>();
 
         // Spawn all prefabs to force mesh/material/shader loading
         for (int i = 0; i < dicePrefabs.Count; i++)
@@ -72,28 +76,19 @@ public class DiceRollSystem : MonoBehaviour
 
             tempObjects.Add(temp);
             
-            float progress = 0.05f + ((float)i / dicePrefabs.Count) * 0.8f;
-            if (LoadingScreenUI.Instance != null) LoadingScreenUI.Instance.SetProgress(progress);
-            
             yield return null; 
         }
 
         // Wait a few frames for engine to process initial physics/render calls
         yield return new WaitForSeconds(0.5f);
-        if (LoadingScreenUI.Instance != null) LoadingScreenUI.Instance.SetProgress(0.9f);
 
         // Cleanup
         foreach (var obj in tempObjects) Destroy(obj);
         
         // Final settle time to allow GC/Cleanup to finish before screen fades
         yield return new WaitForSeconds(0.5f);
-        if (LoadingScreenUI.Instance != null) LoadingScreenUI.Instance.SetProgress(1.0f);
 
         Debug.Log("[DiceRollSystem] Warmup and Settle Complete.");
-        if (LoadingScreenUI.Instance != null)
-        {
-            LoadingScreenUI.Instance.OnSystemInitialized();
-        }
     }
 
     private void CleanupHierarchy()

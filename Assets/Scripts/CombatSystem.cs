@@ -84,7 +84,7 @@ public class CombatSystem : MonoBehaviour
         if (pAnim != null) pAnim.SafeSetFloat("Speed", 1.5f);
         if (eAnim != null && !isStatic && !isDragon && !isWorm) eAnim.SafeSetFloat("Speed", 1.5f);
 
-        float duration = 0.5f; 
+        float duration = 0.8f; // Increased for "butteryness"
         float elapsed = 0;
         Vector3 pStart = playerStats.transform.position;
         Vector3 eStart = enemy.transform.position;
@@ -93,16 +93,23 @@ public class CombatSystem : MonoBehaviour
         {
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
+            // Smooth step curve
             float curve = t * t * (3 - 2 * t); 
 
             playerStats.transform.position = Vector3.Lerp(pStart, playerTarget, curve);
-            playerStats.transform.LookAt(new Vector3(enemyTarget.x, playerStats.transform.position.y, enemyTarget.z));
+            
+            Vector3 lookTarget = new Vector3(enemyTarget.x, playerStats.transform.position.y, enemyTarget.z);
+            if ((lookTarget - playerStats.transform.position).sqrMagnitude > 0.001f)
+                playerStats.transform.rotation = Quaternion.Slerp(playerStats.transform.rotation, Quaternion.LookRotation(lookTarget - playerStats.transform.position), t);
 
             if (!isStatic && !isDragon && !isWorm)
             {
                 enemy.transform.position = Vector3.Lerp(eStart, enemyTarget, curve);
             }
-            enemy.transform.LookAt(new Vector3(playerTarget.x, enemy.transform.position.y, playerTarget.z));
+            
+            Vector3 eLookTarget = new Vector3(playerTarget.x, enemy.transform.position.y, playerTarget.z);
+            if ((eLookTarget - enemy.transform.position).sqrMagnitude > 0.001f)
+                enemy.transform.rotation = Quaternion.Slerp(enemy.transform.rotation, Quaternion.LookRotation(eLookTarget - enemy.transform.position), t);
 
             yield return null;
         }

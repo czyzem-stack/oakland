@@ -9,9 +9,9 @@ public class DragonBob : MonoBehaviour
 
     [Header("Flight Settings")]
     public float flyHeight = 12f; 
-    public float flySpeed = 10f; 
+    public float flySpeed = 12f; 
     public float rotateSpeed = 3f;
-    public float arrivalDistance = 3.0f;
+public float arrivalDistance = 3.0f;
 
     [Header("Behavior")]
     public int minRestTurns = 1; 
@@ -100,28 +100,37 @@ public class DragonBob : MonoBehaviour
         if (stats != null && stats.isDead) return;
         bool inCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat && CombatSystem.Instance.currentEnemyStats == stats;
         if (inCombat) { if (currentState != BobState.InCombat) SetState(BobState.InCombat); return; }
-        else if (currentState == BobState.InCombat) { SetState(BobState.TakingOff); return; }
+        else if (currentState == BobState.InCombat) { SetState(BobState.Flying); return; }
+
+        if (Time.frameCount % 300 == 0) Debug.Log($"[DragonBob] Current State: {currentState}. Pos: {transform.position}");
 
         stateTimer += Time.deltaTime;
-        switch (currentState)
+        
+        // Force Flying state if we somehow dropped out of it
+        if (currentState != BobState.Flying && currentState != BobState.InCombat)
         {
-            case BobState.Flying: FlyToPOI(); break;
-            case BobState.Landing: LandingLogic(); break;
-            case BobState.Resting: RestingLogic(); break;
-            case BobState.TakingOff: TakingOffLogic(); break;
+            SetState(BobState.Flying);
         }
+
+        FlyToPOI();
     }
 
     private void SetState(BobState newState)
     {
         if (currentState == newState && newState != BobState.Resting) return;
         
+        // Prevent landing/resting states
+        if (newState == BobState.Landing || newState == BobState.Resting || newState == BobState.TakingOff)
+        {
+            newState = BobState.Flying;
+        }
+
         Debug.Log($"[DragonBob] STATE CHANGE: {currentState} -> {newState}");
         currentState = newState;
         stateTimer = 0f;
 
         if (obstacle != null) {
-            obstacle.enabled = (newState == BobState.Resting);
+            obstacle.enabled = false;
         }
 
         if (animator == null) return;
@@ -131,18 +140,6 @@ public class DragonBob : MonoBehaviour
                 Debug.Log("[DragonBob] Playing: Fly Forward");
                 animator.CrossFade("Fly Forward", 0.7f); 
                 hasRoaredOverPlayer = false; 
-                break;
-            case BobState.Landing: 
-                Debug.Log("[DragonBob] Playing: Land");
-                animator.CrossFade("Land", 0.3f); 
-                break;
-            case BobState.Resting: 
-                Debug.Log("[DragonBob] Playing: Idle01 (Resting)");
-                animator.CrossFade("Idle01", 1.0f); 
-                break;
-            case BobState.TakingOff: 
-                Debug.Log("[DragonBob] Playing: Take Off");
-                animator.CrossFade("Take Off", 0.2f); 
                 break;
             case BobState.InCombat: 
                 StartCoroutine(CombatTransition()); 
@@ -155,8 +152,16 @@ public class DragonBob : MonoBehaviour
         if (targetPOI == null) { PickNewTargetPOI(); return; }
         Vector3 targetPos = targetPOI.position + Vector3.up * flyHeight;
 
-        // Smooth movement to target (fixes frame-rate dependent jitters)
-        transform.position = Vector3.MoveTowards(transform.position, targetPos, flySpeed * Time.deltaTime);
+        // Smooth movement to target
+        Vector3 nextPos = Vector3.MoveTowards(transform.position, targetPos, flySpeed * Time.deltaTime);
+        
+        if (nextPos == transform.position && flySpeed > 0)
+        {
+            PickNewTargetPOI();
+            return;
+        }
+        
+        transform.position = nextPos;
 
         // Smooth rotation to direction
         Vector3 direction = (targetPos - transform.position).normalized;
@@ -168,39 +173,25 @@ public class DragonBob : MonoBehaviour
 
         if (playerNav != null && !hasRoaredOverPlayer) {
             float horizontalDist = Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(playerNav.transform.position.x, playerNav.transform.position.z));
-            if (horizontalDist < 10f) { animator.CrossFade("Scream", 0.4f); hasRoaredOverPlayer = true; }
+            if (horizontalDist < 12f) { animator.CrossFade("Scream", 0.4f); hasRoaredOverPlayer = true; }
         }
-        if (Vector3.Distance(transform.position, targetPos) < arrivalDistance) SetState(BobState.Landing);
+        
+        if (Vector3.Distance(transform.position, targetPos) < arrivalDistance) PickNewTargetPOI();
     }
 
-    private void LandingLogic()
-    {
-        if (targetPOI == null) { SetState(BobState.TakingOff); return; }
-        Vector3 targetPos = targetPOI.position + Vector3.up * 0.5f;
-        transform.position = Vector3.MoveTowards(transform.position, targetPos, flySpeed * 0.6f * Time.deltaTime);
-        if (Vector3.Distance(transform.position, targetPos) < 1.0f) { SetState(BobState.Resting); restTurnsRemaining = Random.Range(minRestTurns, maxRestTurns + 1); CheckForCombat(); }
-    }
-
-    private void RestingLogic()
-    {
-        if (stateTimer > 12f) { stateTimer = 0f; animator.CrossFade(Random.value > 0.5f ? "Scream" : "Idle01", 1.0f); }
-    }
-
-    private void TakingOffLogic()
-    {
-        Vector3 targetPos = transform.position + Vector3.up * flyHeight;
-        transform.position = Vector3.MoveTowards(transform.position, targetPos, flySpeed * 0.5f * Time.deltaTime);
-        if (Vector3.Distance(transform.position, targetPos) < 1f) { PickNewTargetPOI(); SetState(BobState.Flying); }
-    }
+    private void LandingLogic() { }
+    private void RestingLogic() { }
+    private void TakingOffLogic() { }
 
     private void HandleDiceRoll(int rollTotal)
     {
         if (stats.isDead || currentState == BobState.InCombat) return;
         rollsSinceStart++;
-        if (rollsSinceStart == 1) { flyHeight = 15f; PickFlyOverTarget(); SetState(BobState.Flying); }
-        else if (rollsSinceStart == 2) { flyHeight = 8f; PickFlyOverTarget(); SetState(BobState.Flying); }
-        else if (rollsSinceStart == 3) { PickNearbyLandingSpot(); SetState(BobState.Landing); }
-        if (currentState == BobState.Resting) { restTurnsRemaining--; if (restTurnsRemaining <= 0) SetState(BobState.TakingOff); else CheckForCombat(); }
+        
+        // Bob just flies around more actively on rolls
+        flyHeight = Random.Range(10f, 15f);
+        PickFlyOverTarget();
+        SetState(BobState.Flying);
     }
 
     private void PickFlyOverTarget()
