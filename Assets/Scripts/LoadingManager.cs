@@ -8,21 +8,22 @@ public class LoadingManager : MonoBehaviour
 {
     [Header("Settings")]
     public string sceneToLoad = "Main";
-    public float minLoadingTime = 3.0f; // Give it enough time to feel like it's loading everything
+    public float minLoadingTime = 3.0f;
     
     [Header("UI References")]
     public Slider progressBar;
     public TMP_Text progressText;
-    public Image background;
+    public UnityEngine.UI.Image background;
+    public GameObject tapToStartText;
 
     [Header("Warmup Settings")]
     public GameObject[] warmupPrefabs;
-    public bool warmupInProgress = false;
 
     private void Start()
     {
         if (progressBar != null) progressBar.value = 0;
         if (progressText != null) progressText.text = "0%";
+        if (tapToStartText != null) tapToStartText.SetActive(false);
         
         StartCoroutine(LoadingSequence());
     }
@@ -35,79 +36,65 @@ public class LoadingManager : MonoBehaviour
 
     private IEnumerator WarmupPrefabsRoutine()
     {
-        warmupInProgress = true;
         if (warmupPrefabs == null || warmupPrefabs.Length == 0) yield break;
 
         for (int i = 0; i < warmupPrefabs.Length; i++)
         {
             if (warmupPrefabs[i] == null) continue;
-            
-            // Spawn far away
             GameObject temp = Instantiate(warmupPrefabs[i], new Vector3(0, -1000, 0), Quaternion.identity);
             temp.SetActive(true);
-            
-            // Wait one frame for the engine to register it
             yield return null;
-            
             Destroy(temp);
             
-            // Update visual progress slightly for warmup
-            float p = (float)i / warmupPrefabs.Length * 0.2f; // Warmup takes first 20%
+            float p = (float)i / warmupPrefabs.Length * 0.15f; 
             if (progressBar != null) progressBar.value = p;
-            if (progressText != null) progressText.text = $"Warming assets... {(p * 100):F0}%";
+            if (progressText != null) progressText.text = $"Initialising... {(p * 100):F0}%";
         }
-        
-        // Mark DiceRollSystem as warmed up so it doesn't do it again
         DiceRollSystem.WarmedUp = true;
-        warmupInProgress = false;
     }
 
     private IEnumerator LoadSceneAsync()
     {
-        // Give the UI a frame to update
-        yield return null;
-
-        // Force a GC collect to start clean
-        System.GC.Collect();
-
-        AsyncOperation operation = SceneManager.LoadSceneAsync(sceneToLoad);
-        operation.allowSceneActivation = false;
+        AsyncOperation op = SceneManager.LoadSceneAsync(sceneToLoad);
+        op.allowSceneActivation = false;
 
         float startTime = Time.time;
-        float visualProgress = 0f;
+        float visualProgress = progressBar != null ? progressBar.value : 0.15f;
 
         while (visualProgress < 1.0f)
         {
-            float targetProgress = Mathf.Clamp01(operation.progress / 0.9f);
+            float targetProgress = Mathf.Clamp01(op.progress / 0.9f);
+            visualProgress = Mathf.MoveTowards(visualProgress, targetProgress, Time.deltaTime * 0.4f);
             
-            // Smoothly move the progress bar
-            visualProgress = Mathf.MoveTowards(visualProgress, targetProgress, Time.deltaTime * 0.5f);
-            
-            if (progressBar != null)
-                progressBar.value = visualProgress;
-            
-            if (progressText != null)
-                progressText.text = $"{(visualProgress * 100):F0}%";
+            if (progressBar != null) progressBar.value = visualProgress;
+            if (progressText != null) progressText.text = $"{(visualProgress * 100):F0}%";
 
-            // If loading is actually finished at 90% (Unity's limit for allowSceneActivation=false)
-            if (operation.progress >= 0.9f)
+            if (op.progress >= 0.9f && Time.time - startTime >= minLoadingTime)
             {
-                // We still wait for the minLoadingTime to satisfy the "load everything" feel
-                if (Time.time - startTime >= minLoadingTime)
-                {
-                    visualProgress = 1.0f;
-                }
+                visualProgress = 1.0f;
+                if (progressBar != null) progressBar.value = 1.0f;
+                if (progressText != null) progressText.text = "100%";
             }
 
             yield return null;
         }
 
-        if (progressBar != null) progressBar.value = 1.0f;
-        if (progressText != null) progressText.text = "100%";
+        if (tapToStartText != null)
+        {
+            tapToStartText.SetActive(true);
+            if (progressBar != null) progressBar.gameObject.SetActive(false);
+            if (progressText != null) progressText.gameObject.SetActive(false);
+            
+            while (true)
+            {
+                if (UnityEngine.InputSystem.Pointer.current != null && UnityEngine.InputSystem.Pointer.current.press.wasPressedThisFrame)
+                {
+                    break;
+                }
+                yield return null;
+            }
+        }
 
-        // Small delay to show 100%
-        yield return new WaitForSeconds(0.5f);
-
-        operation.allowSceneActivation = true;
+        op.allowSceneActivation = true;
     }
 }
