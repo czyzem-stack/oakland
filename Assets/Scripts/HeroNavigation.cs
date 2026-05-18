@@ -8,7 +8,7 @@ public class HeroNavigation : MonoBehaviour
 {
     [Header("Navigation Settings")]
     public Transform poiRoot;
-    public float metersPerDicePoint = 2.0f;
+    public float metersPerDicePoint = 1.0f;
     public float arrivalDistance = 1.0f;
 
     private NavMeshAgent agent;
@@ -20,6 +20,7 @@ public class HeroNavigation : MonoBehaviour
     public float remainingMeters = 0f;
     public bool isMoving = false;
     private Vector3 lastPosition;
+    private float totalDistanceForCurrentMove = 0f;
 
     private void EnsureComponents()
     {
@@ -63,18 +64,20 @@ public class HeroNavigation : MonoBehaviour
             // Check if arrived at POI
             if (!agent.pathPending && agent.remainingDistance <= agent.stoppingDistance)
             {
+                Debug.Log($"[HeroNavigation] Reached POI: {currentTarget.name}. Total meters remaining: {remainingMeters:F2}");
                 OnReachedPOI();
             }
             // Check if out of fuel
             else if (remainingMeters <= 0)
             {
+                Debug.Log($"[HeroNavigation] Stopped: Out of distance ({totalDistanceForCurrentMove:F2}m target met). Distance to POI: {agent.remainingDistance:F2}m");
                 StopMoving("Out of distance");
             }
         }
         else
         {
             if (animator != null) animator.SetFloat("Speed", 0f);
-            if (isMoving) StopMoving("Idle/Stop");
+            if (isMoving) StopMoving("Movement Paused");
             lastPosition = transform.position; 
         }
     }
@@ -82,9 +85,10 @@ public class HeroNavigation : MonoBehaviour
     public void OnDiceRolled(int totalValue)
     {
         EnsureComponents();
-        // Add to the pool
-        remainingMeters += (totalValue * metersPerDicePoint);
-        Debug.Log($"[HeroNavigation] Gained {totalValue * metersPerDicePoint}m. Total pool: {remainingMeters}m.");
+        float gainedDistance = totalValue * metersPerDicePoint;
+        remainingMeters += gainedDistance;
+        totalDistanceForCurrentMove = gainedDistance;
+        Debug.Log($"[HeroNavigation] Dice Result: {totalValue}. Gained {gainedDistance:F2}m. Total pool: {remainingMeters:F2}m.");
         
         if (currentTarget == null)
         {
@@ -134,10 +138,19 @@ public class HeroNavigation : MonoBehaviour
 
     private void OnReachedPOI()
     {
-        Debug.Log("Reached POI target location!");
-        currentTarget = null; // Clear so next roll picks a new one
-        StopMoving("Target Reached");
-        SelectNextPOI(); // Pre-select for next roll
+        Debug.Log($"[HeroNavigation] Reached target: {currentTarget.name}. Remaining pool: {remainingMeters:F2}m.");
+        currentTarget = null;
+        SelectNextPOI();
+
+        if (remainingMeters > 0.1f)
+        {
+            Debug.Log("[HeroNavigation] Distance remains, continuing to next POI.");
+            StartMoving();
+        }
+        else
+        {
+            StopMoving("Target Reached");
+        }
     }
 
     private void ResetPOIs()

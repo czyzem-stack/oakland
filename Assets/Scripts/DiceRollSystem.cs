@@ -93,6 +93,11 @@ public class DiceRollSystem : MonoBehaviour
             steveAnimator.SetTrigger("Roll");
         }
 
+        // Consume 1 Mana per roll
+        CharacterStats stats = GetComponentInParent<CharacterStats>();
+        if (stats == null) stats = GetComponentInChildren<CharacterStats>();
+        if (stats != null) stats.ConsumeMana(1);
+
         StartCoroutine(RollRoutine());
     }
 
@@ -167,6 +172,7 @@ public class DiceRollSystem : MonoBehaviour
 
         // 4. Result
         int total = 0;
+        List<int> rollValues = new List<int>();
         foreach (var die in activeDice)
         {
             if (die != null)
@@ -176,15 +182,28 @@ public class DiceRollSystem : MonoBehaviour
                 {
                     int val = stats.side;
                     if (diceType == DiceType.D2) val = (val > 3) ? 2 : 1;
+                    rollValues.Add(val);
                     total += val;
                 }
             }
         }
 
+        // Check for doubles if 2 dice are rolled
+        bool isDoubles = rollValues.Count == 2 && rollValues[0] == rollValues[1];
+        if (isDoubles)
+        {
+            total *= 2;
+            Debug.Log($"[DiceRollSystem] DOUBLES! Values: {rollValues[0]} and {rollValues[1]}. Total distance doubled to: {total}");
+        }
+        else
+        {
+            Debug.Log($"[DiceRollSystem] Roll total: {total} (Values: {string.Join(", ", rollValues)})");
+        }
+
         if (resultText != null) 
         {
             resultText.gameObject.SetActive(true);
-            resultText.text = total.ToString();
+            resultText.text = isDoubles ? $"DOUBLE! {total}" : total.ToString();
             StartCoroutine(AnimateFloatingText(resultText));
         }
 
