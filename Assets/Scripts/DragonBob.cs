@@ -115,23 +115,38 @@ public class DragonBob : MonoBehaviour
     private void SetState(BobState newState)
     {
         if (currentState == newState && newState != BobState.Resting) return;
+        
+        Debug.Log($"[DragonBob] STATE CHANGE: {currentState} -> {newState}");
         currentState = newState;
         stateTimer = 0f;
 
         if (obstacle != null) {
-            // PERFORMANCE FIX: Only enable obstacle when stationary (Resting). 
-            // Enabling while moving in 'Landing' or 'TakingOff' causes NavMesh 'hiccups'.
             obstacle.enabled = (newState == BobState.Resting);
         }
 
         if (animator == null) return;
         switch (newState)
         {
-            case BobState.Flying: animator.CrossFade("Fly Forward", 0.7f); hasRoaredOverPlayer = false; break;
-            case BobState.Landing: animator.CrossFade("Land", 0.3f); break;
-            case BobState.Resting: animator.CrossFade("Idle01", 1.0f); break;
-            case BobState.TakingOff: animator.CrossFade("Take Off", 0.2f); break;
-            case BobState.InCombat: StartCoroutine(CombatTransition()); break;
+            case BobState.Flying: 
+                Debug.Log("[DragonBob] Playing: Fly Forward");
+                animator.CrossFade("Fly Forward", 0.7f); 
+                hasRoaredOverPlayer = false; 
+                break;
+            case BobState.Landing: 
+                Debug.Log("[DragonBob] Playing: Land");
+                animator.CrossFade("Land", 0.3f); 
+                break;
+            case BobState.Resting: 
+                Debug.Log("[DragonBob] Playing: Idle01 (Resting)");
+                animator.CrossFade("Idle01", 1.0f); 
+                break;
+            case BobState.TakingOff: 
+                Debug.Log("[DragonBob] Playing: Take Off");
+                animator.CrossFade("Take Off", 0.2f); 
+                break;
+            case BobState.InCombat: 
+                StartCoroutine(CombatTransition()); 
+                break;
         }
     }
 
