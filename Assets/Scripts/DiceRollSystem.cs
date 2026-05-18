@@ -60,8 +60,15 @@ public class DiceRollSystem : MonoBehaviour
             // Spawn far below the world
             GameObject temp = Instantiate(prefab, new Vector3(0, -500, 0), Quaternion.identity);
             temp.SetActive(true); // Must be active to warm up
+            
+            if (diceMaterial != null)
+            {
+                var renderers = temp.GetComponentsInChildren<MeshRenderer>();
+                foreach (var r in renderers) r.sharedMaterial = diceMaterial;
+            }
+
             tempObjects.Add(temp);
-            yield return null; 
+yield return null; 
         }
 
         // Wait a few frames for engine to process initial physics/render calls
@@ -182,9 +189,15 @@ if (prefab == null)
             die.transform.localScale = Vector3.one * scale;
             activeDice.Add(die);
             
+            if (diceMaterial != null)
+            {
+                var renderers = die.GetComponentsInChildren<MeshRenderer>();
+                foreach (var r in renderers) r.sharedMaterial = diceMaterial;
+            }
+
             Rigidbody rb = die.GetComponent<Rigidbody>();
             if (rb == null) rb = die.AddComponent<Rigidbody>();
-            activeDiceRBs.Add(rb);
+activeDiceRBs.Add(rb);
 
             Debug.Log($"[DiceRollSystem] Spawning die {i} at {spawnPos} in world space.");
 rb.mass = 1.0f;

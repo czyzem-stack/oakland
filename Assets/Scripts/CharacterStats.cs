@@ -9,8 +9,11 @@ public class CharacterStats : MonoBehaviour
     public int wit = 10;
     public int grit = 12;
 
+    [Header("Combat Stats")]
+    public int critThreshold = 11;
+
     [Header("Current State")]
-    public float currentHP;
+public float currentHP;
     public float currentMana;
     public bool isDead = false;
 

@@ -175,10 +175,10 @@ yield return null;
     {
         isAttackSequenceRunning = true;
         
-        bool isCritical = rollValue >= 11; 
+        bool isCritical = rollValue >= playerStats.critThreshold; 
         
         Animator playerAnim = playerStats.GetComponent<Animator>();
-        if (playerAnim != null) playerAnim.SetTrigger("Attack");
+if (playerAnim != null) playerAnim.SetTrigger("Attack");
 
         // Faster impact timing (snappier)
         yield return new WaitForSeconds(0.35f);
@@ -236,9 +236,9 @@ if (enemyAnim != null) enemyAnim.SetTrigger("GetHit");
         yield return new WaitForSeconds(0.35f);
 
         int enemyRoll = Random.Range(1, 13);
-        bool isCritical = enemyRoll >= 11;
+        bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
         int damage = enemyRoll + currentEnemyStats.MeleeDamage;
-        if (isCritical) damage *= 2;
+if (isCritical) damage *= 2;
 
         playerStats.TakeDamage(damage);
         

@@ -55,9 +55,12 @@ public class PointOfInterest : MonoBehaviour
 
         GameObject enemy = Instantiate(prefab, transform.position, transform.rotation, transform);
         enemy.name = enemyType.ToString() + "_" + name;
+        
+        // Reduce size by 25% (Scale 0.75)
+        enemy.transform.localScale = Vector3.one * 0.75f;
 
         // Setup CharacterStats if missing
-        CharacterStats stats = enemy.GetComponent<CharacterStats>();
+CharacterStats stats = enemy.GetComponent<CharacterStats>();
         if (stats == null) stats = enemy.AddComponent<CharacterStats>();
         
         // Base Stats setup
