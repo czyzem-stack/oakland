@@ -378,36 +378,38 @@ bool isDragon = currentEnemyStats.name.Contains("DragonBob");
             if (isDragon && enemyAnim != null) enemyAnim.CrossFade("Fly Float", 0.5f);
 }
 
+        private static Canvas worldCombatTextCanvas;
+
         public static void SpawnText(Vector3 position, string text, Color color)
         {
-        GameObject canvasGo = new GameObject("FloatingTextCanvas");
-        canvasGo.transform.position = position + Vector3.up * 0.5f;
-        Canvas canvas = canvasGo.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-        canvasGo.AddComponent<FaceCamera>();
-        canvasGo.AddComponent<CanvasGroup>(); 
-        
-        RectTransform rect = canvasGo.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(300, 100); 
-        rect.localScale = Vector3.one * 0.0075f; 
+            if (worldCombatTextCanvas == null)
+            {
+                GameObject canvasGo = new GameObject("WorldCombatTextCanvas");
+                worldCombatTextCanvas = canvasGo.AddComponent<Canvas>();
+                worldCombatTextCanvas.renderMode = RenderMode.WorldSpace;
+                canvasGo.transform.localScale = Vector3.one * 0.0075f;
+            }
 
-        GameObject textGo = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
-        textGo.transform.SetParent(canvasGo.transform, false);
-        TextMeshProUGUI t = textGo.GetComponent<TextMeshProUGUI>();
-        
-        t.font = Resources.Load<TMP_FontAsset>("Alata-Regular SDF");
-        if (t.font == null) t.font = Resources.Load<TMP_FontAsset>("LiberationSans SDF"); // Fallback
-        t.fontSize = 60; 
-        t.alignment = TextAlignmentOptions.Center;
-        t.textWrappingMode = TextWrappingModes.NoWrap;
-        
-        t.outlineWidth = 0.2f;
-        t.outlineColor = Color.black;
+            GameObject textGo = new GameObject("CombatText", typeof(RectTransform), typeof(TextMeshProUGUI));
+            textGo.transform.SetParent(worldCombatTextCanvas.transform, false);
+            textGo.transform.position = position + Vector3.up * 0.5f;
 
-        FloatingCombatText fct = canvasGo.AddComponent<FloatingCombatText>();
-        fct.text = t;
-        fct.driftSpeed = 2.0f; 
-        fct.Setup(text, color);
+            TextMeshProUGUI t = textGo.GetComponent<TextMeshProUGUI>();
+            t.font = Resources.Load<TMP_FontAsset>("Alata-Regular SDF");
+            if (t.font == null) t.font = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
+            t.fontSize = 60; 
+            t.alignment = TextAlignmentOptions.Center;
+            t.textWrappingMode = TextWrappingModes.NoWrap;
+            t.outlineWidth = 0.2f;
+            t.outlineColor = Color.black;
+            t.text = text;
+            t.color = color;
+
+            textGo.AddComponent<FaceCamera>();
+            FloatingCombatText fct = textGo.AddComponent<FloatingCombatText>();
+            fct.text = t;
+            fct.driftSpeed = 2.0f;
+            fct.Setup(text, color);
         }
 
         public void SpawnDamageText(Vector3 position, string text, Color color)
