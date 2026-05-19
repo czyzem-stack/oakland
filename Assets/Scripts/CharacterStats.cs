@@ -30,16 +30,28 @@ public class CharacterStats : MonoBehaviour
     public int level = 1;
     public float amountPerKill = 5f; // New: amount per kill multiplier
 
-    public float RegenTimeRemaining => (currentMana < MaxMana) ? Mathf.Max(0, regenInterval - regenTimer) : 0;
+    public float RegenTimeRemaining => (currentMana < cachedMaxMana) ? Mathf.Max(0, regenInterval - regenTimer) : 0;
 
-    // Derived Stats
-    public int MaxHP => brawn * 5 + 10;
-    public int MaxMana => grit * 3 + 10; // Max Energy
+    // Derived Stats (Cached)
+    private int cachedMaxHP;
+    private int cachedMaxMana;
+    private int cachedMaxXP;
+
+    public int MaxHP => cachedMaxHP;
+    public int MaxMana => cachedMaxMana;
+    public int MaxXP => cachedMaxXP;
+    
     public int MaxStamina => maxStamina;
-    public int MaxXP => (int)(100 * Mathf.Pow(1.5f, level - 1)); // Exponential curve
     public int MeleeDamage => brawn;
     public int RangedDamage => finesse;
     public int Defense => finesse / 2;
+
+    private void RefreshCachedStats()
+    {
+        cachedMaxHP = brawn * 5 + 10;
+        cachedMaxMana = grit * 3 + 10;
+        cachedMaxXP = (int)(100 * Mathf.Pow(1.5f, level - 1));
+    }
 
     public void AddXP(float amount)
     {
@@ -59,6 +71,7 @@ public class CharacterStats : MonoBehaviour
     {
         currentXP -= MaxXP;
         level++;
+        RefreshCachedStats();
 
         // Passive +1 to a random stat
         string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
@@ -103,7 +116,7 @@ public class CharacterStats : MonoBehaviour
     public float CritChance => Mathf.Clamp01((13 - critThreshold) / 12f) * 100f;
 
     public void ApplyStatUpgrade(string statName, int amount, bool showFeedback)
-{
+    {
         switch (statName)
         {
             case "Brawn": brawn += amount; break;
@@ -112,6 +125,8 @@ public class CharacterStats : MonoBehaviour
             case "Grit": grit += amount; break;
         }
         
+        RefreshCachedStats();
+
         // Refresh UI
         var statsUI = UnityEngine.Object.FindAnyObjectByType<StatsUI>();
         if (statsUI != null) statsUI.Refresh();
@@ -128,7 +143,10 @@ public class CharacterStats : MonoBehaviour
 
     private void Awake()
     {
-        ResetStats();
+        RefreshCachedStats();
+        currentHP = MaxHP;
+        currentMana = MaxMana;
+        currentStamina = MaxStamina;
     }
 
     private void Start()

@@ -18,6 +18,7 @@ public class HeroNavigation : MonoBehaviour
     private List<Transform> availablePOIs = new List<Transform>();
     private Transform currentTarget;
     private CharacterStats stats;
+    private Camera mainCam;
 
     [Header("Status")]
     public float remainingMeters = 0f;
@@ -73,6 +74,7 @@ public class HeroNavigation : MonoBehaviour
         if (agent == null) agent = GetComponent<NavMeshAgent>();
         if (animator == null) animator = GetComponent<Animator>();
         if (stats == null) stats = GetComponent<CharacterStats>();
+        if (mainCam == null) mainCam = Camera.main;
     }
 
     void Start()
@@ -239,7 +241,7 @@ public class HeroNavigation : MonoBehaviour
                 currentDist += segmentLen;
                 if (totalIterations > 1000) break;
             }
-Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {currentTarget.name}. Status: {path.status}");
+    Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {currentTarget.name}. Status: {path.status}");
         }
         else
         {
@@ -306,7 +308,7 @@ Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {current
             {
                 int impactDamage = Mathf.CeilToInt(remainingMeters * (stats.currentHP / 10f));
                 enemyStats.TakeDamage(impactDamage);
-                if (CombatSystem.Instance != null) { CombatSystem.Instance.SpawnDamageText(enemyStats.transform.position + Vector3.up * 2f, $"IMPACT! -{impactDamage}", Color.yellow); Camera.main.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f); }
+                if (CombatSystem.Instance != null) { CombatSystem.Instance.SpawnDamageText(enemyStats.transform.position + Vector3.up * 2f, $"IMPACT! -{impactDamage}", Color.yellow); (mainCam ?? (mainCam = Camera.main))?.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f); }
                 if (animator != null) animator.SafeSetTrigger("Attack");
                 remainingMeters = 0;
 

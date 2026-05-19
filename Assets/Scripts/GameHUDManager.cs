@@ -78,7 +78,16 @@ if (hpFill != null) hpFill.color = Color.red;
     {
         if (playerStats == null) 
         {
-            if (!Application.isPlaying) playerStats = Object.FindAnyObjectByType<CharacterStats>();
+            if (Application.isPlaying)
+            {
+                // Only find once and cache
+                playerStats = Object.FindAnyObjectByType<CharacterStats>();
+            }
+            else
+            {
+                playerStats = Object.FindAnyObjectByType<CharacterStats>();
+            }
+            
             if (playerStats == null) return;
         }
 
