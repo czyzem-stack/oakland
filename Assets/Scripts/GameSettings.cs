@@ -8,8 +8,12 @@ public class GameSettings : MonoBehaviour
     public int orcsKilledToUnlockWorms = 2;
     public int totalOrcsKilled = 0;
 
+    [Header("Navigation Settings")]
+    public float metersPerDicePoint = 2.5f;
+    public float arrivalDistance = 1.0f;
+
     private void Awake()
-    {
+{
         Time.timeScale = 1f;
         GenericPopup.ResetForSceneLoad();
         EquipmentLootPopup.ResetForSceneLoad();
@@ -18,13 +22,19 @@ public class GameSettings : MonoBehaviour
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
-            Application.targetFrameRate = 60;
-            QualitySettings.vSyncCount = 0;
+            InitializeSettings();
         }
         else
         {
+            Instance.InitializeSettings(); // Refresh settings even if instance exists
             Destroy(gameObject);
         }
+    }
+
+    public void InitializeSettings()
+    {
+        Application.targetFrameRate = 60;
+        QualitySettings.vSyncCount = 0;
     }
 
     public void RegisterOrcKill()

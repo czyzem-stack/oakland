@@ -56,6 +56,9 @@ public class HeroNavigation : MonoBehaviour
             wormStats.grit = 10;
             wormStats.ResetStats();
 
+            // Add unique behavior
+            if (worm.GetComponent<WormEnemy>() == null) worm.AddComponent<WormEnemy>();
+
             PointOfInterest poi = Object.FindAnyObjectByType<PointOfInterest>();
             if (poi != null && poi.healthCanvasPrefab != null)
             {
@@ -107,6 +110,9 @@ public class HeroNavigation : MonoBehaviour
         return agent != null && agent.enabled && agent.isOnNavMesh;
     }
 
+    private float currentAnimSpeed = 0f;
+    private const float AnimSpeedSmoothTime = 0.15f;
+
     void Start()
     {
         EnsureComponents();
@@ -115,21 +121,22 @@ public class HeroNavigation : MonoBehaviour
         {
             agent.autoBraking = false;
             agent.stoppingDistance = arrivalDistance;
-            agent.acceleration = 20f;
-            agent.angularSpeed = 600f;
+            agent.acceleration = 12f; // Smoother acceleration to prevent "gliding"
+            agent.angularSpeed = 600f; // More natural turning
         }
         if (poiRoot != null) ResetPOIs();
         lastPosition = transform.position;
-    }
+        }
 
-    void Update()
-    {
+        void Update()
+        {
         if (agent == null || stats.isDead) return;
 
         if (GenericPopup.IsOpen || EquipmentLootPopup.IsOpen)
         {
             if (isMoving) StopMoving("Popup open");
-            if (animator != null) animator.SafeSetFloat("Speed", 0f);
+            currentAnimSpeed = Mathf.MoveTowards(currentAnimSpeed, 0f, Time.deltaTime * 8f);
+            if (animator != null) animator.SafeSetFloat("Speed", currentAnimSpeed);
             return;
         }
 
@@ -142,17 +149,25 @@ public class HeroNavigation : MonoBehaviour
         {
             if (CanControlAgent() && agent.isStopped) agent.isStopped = false;
 
+            // Calculate distance since last frame accurately
             float distMoved = Vector3.Distance(transform.position, lastPosition);
+            
+            // Safety: if we somehow warped or had a huge frame spike, clamp the distance
+            if (distMoved > 5f) distMoved = 0; 
+            
             remainingMeters -= distMoved;
             metersTraveledSinceLastCoin += distMoved;
             lastPosition = transform.position;
 
-            float speed = agent.velocity.magnitude / agent.speed;
+            // Use desiredVelocity for more responsive animation anticipation
+            float targetSpeed = agent.desiredVelocity.magnitude / (agent.speed > 0 ? agent.speed : 1f);
             
-            // If we are actively moving but velocity is low (starting up), force a walk animation
-            if (isMoving && speed < 0.1f && agent.hasPath) speed = 0.5f;
+            // Smoothly lerp the animation speed to avoid "gliding" or sudden jumps
+            // Use a slightly faster lerp when stopping to avoid foot sliding
+            float smoothTime = targetSpeed < 0.1f ? 0.05f : AnimSpeedSmoothTime;
+            currentAnimSpeed = Mathf.MoveTowards(currentAnimSpeed, targetSpeed, Time.deltaTime / smoothTime);
 
-            if (animator != null) animator.SafeSetFloat("Speed", speed);
+            if (animator != null) animator.SafeSetFloat("Speed", currentAnimSpeed);
 
             if (currentTarget != null && !agent.pathPending && agent.isOnNavMesh && agent.remainingDistance <= agent.stoppingDistance)
                 OnReachedPOI();
@@ -161,14 +176,16 @@ public class HeroNavigation : MonoBehaviour
         }
         else
         {
-            if (animator != null) animator.SafeSetFloat("Speed", 0f);
+            currentAnimSpeed = Mathf.MoveTowards(currentAnimSpeed, 0f, Time.deltaTime * 6f);
+            if (animator != null) animator.SafeSetFloat("Speed", currentAnimSpeed);
             if (isMoving) StopMoving("Movement Paused");
             lastPosition = transform.position;
         }
-    }
+        }
 
     public void OnDiceRolled(int totalValue)
     {
+        if (stats == null) EnsureComponents();
         if (stats.isDead) return;
 
         rollsCount++;
@@ -178,18 +195,23 @@ public class HeroNavigation : MonoBehaviour
             return;
         }
 
-        EnsureComponents();
-
         float gainedDistance = totalValue * metersPerDicePoint;
         remainingMeters += gainedDistance;
         totalDistanceForCurrentMove = gainedDistance;
 
-        if (currentTarget == null) SelectNextPOI();
-
-        if (currentTarget != null && agent != null && TryWarpToNavMesh())
+        // Force select a target if we don't have one
+        if (currentTarget == null) 
         {
-            if (!spawnedCoinsForCurrentTarget) SpawnCoinsAlongPath();
-            StartMoving();
+            SelectNextPOI();
+        }
+
+        if (currentTarget != null)
+        {
+            if (agent != null && TryWarpToNavMesh())
+            {
+                if (!spawnedCoinsForCurrentTarget) SpawnCoinsAlongPath();
+                StartMoving();
+            }
         }
     }
 
@@ -217,8 +239,8 @@ public class HeroNavigation : MonoBehaviour
         if (agent.CalculatePath(targetPos, path))
         {
             float currentDist = 0;
-            float coinInterval = 5.0f;
-            float nextCoinDist = 5.0f;
+            float coinInterval = 6.0f; // Slightly larger interval
+            float nextCoinDist = 6.0f;
             int spawnedCount = 0;
             int totalIterations = 0;
             List<Vector3> spawnedPositions = new List<Vector3>();
@@ -232,17 +254,17 @@ public class HeroNavigation : MonoBehaviour
                 while (currentDist + segmentLen >= nextCoinDist)
                 {
                     totalIterations++;
-                    if (totalIterations > 1000) break;
+                    if (totalIterations > 200) break; // Lowered limit significantly
 
                     float t = (nextCoinDist - currentDist) / segmentLen;
                     Vector3 spawnPos = Vector3.Lerp(start, end, Mathf.Clamp01(t));
 
-                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, NavSampleMask))
+                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 2f, NavSampleMask))
                         spawnPos = hit.position + Vector3.up * 0.7f;
                     else
                         spawnPos.y += 0.7f;
 
-                    if (Vector3.Distance(spawnPos, transform.position) < 2.0f)
+                    if (Vector3.Distance(spawnPos, transform.position) < 3.0f)
                     {
                         nextCoinDist += coinInterval;
                         continue;
@@ -251,12 +273,13 @@ public class HeroNavigation : MonoBehaviour
                     bool tooClose = false;
                     foreach (var pos in spawnedPositions)
                     {
-                        if (Vector3.Distance(spawnPos, pos) < 3.0f) { tooClose = true; break; }
+                        if (Vector3.Distance(spawnPos, pos) < 4.0f) { tooClose = true; break; }
                     }
 
                     if (!tooClose)
                     {
-                        Collider[] existing = Physics.OverlapSphere(spawnPos, 1.5f);
+                        // Optimization: Avoid OverlapSphere if possible, or use a smaller radius
+                        Collider[] existing = Physics.OverlapSphere(spawnPos, 1.0f);
                         foreach (var col in existing)
                         {
                             if (col.GetComponent<Coin>() != null) { tooClose = true; break; }
@@ -274,12 +297,12 @@ public class HeroNavigation : MonoBehaviour
                     }
 
                     nextCoinDist += coinInterval;
-                    }
-                    currentDist += segmentLen;
-                    if (totalIterations > 1000) break;
-                    }
-                    Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {currentTarget.name}. Status: {path.status}");
-                    }
+                }
+                currentDist += segmentLen;
+                if (totalIterations > 200) break;
+            }
+            Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {currentTarget.name}. Status: {path.status}");
+        }
                     else
                     {
                     Debug.LogError($"[HeroNavigation] agent.CalculatePath failed to {targetPos}!");
@@ -297,29 +320,28 @@ public class HeroNavigation : MonoBehaviour
 
                     private void SelectNextPOI()
                     {
-                    ClearActiveCoins();
-                    spawnedCoinsForCurrentTarget = false;
-                    if (availablePOIs.Count == 0) ResetPOIs();
+                        ClearActiveCoins();
+                        spawnedCoinsForCurrentTarget = false;
+                        ResetPOIs();
 
-        if (availablePOIs.Count > 0)
-        {
-            int index = -1;
-            if (rollsCount <= 3)
-            {
-                for (int i = 0; i < availablePOIs.Count; i++)
-                {
-                    PointOfInterest poi = availablePOIs[i].GetComponent<PointOfInterest>();
-                    if (poi != null && poi.enemyType == EnemyType.TreasureChest) { index = i; break; }
-                }
-            }
+                        if (availablePOIs.Count > 0)
+                        {
+                            int index = -1;
+                            if (rollsCount <= 3)
+                            {
+                                for (int i = 0; i < availablePOIs.Count; i++)
+                                {
+                                    PointOfInterest poi = availablePOIs[i].GetComponent<PointOfInterest>();
+                                    if (poi != null && poi.enemyType == EnemyType.TreasureChest) { index = i; break; }
+                                }
+                            }
 
-            if (index == -1) index = Random.Range(0, availablePOIs.Count);
+                            if (index == -1) index = Random.Range(0, availablePOIs.Count);
 
-            currentTarget = availablePOIs[index];
-            availablePOIs.RemoveAt(index);
-            Debug.Log($"[HeroNavigation] Target POI: {currentTarget.name} (FTUE Filter: {rollsCount <= 3})");
-        }
-    }
+                            currentTarget = availablePOIs[index];
+                            Debug.Log($"[HeroNavigation] Target Selected: {currentTarget.name} at {currentTarget.position}");
+                        }
+                    }
 
     private void StartMoving()
     {
@@ -331,6 +353,15 @@ public class HeroNavigation : MonoBehaviour
             isMoving = false;
             return;
         }
+
+        // Dynamic stopping distance: chests need more space due to obstacles and combat transition math
+        float stopDist = arrivalDistance;
+        CharacterStats enemyStats = currentTarget.GetComponentInChildren<CharacterStats>();
+        if (enemyStats != null && (enemyStats.name.Contains("Chest") || enemyStats.name.Contains("TreasureChest")))
+        {
+            stopDist = 2.5f; // Match CombatSystem's fixed transition distance (1.25m from midpoint = 2.5m apart)
+        }
+        agent.stoppingDistance = stopDist;
 
         // Reset any combat/victory triggers so Steve transitions back to movement
         if (animator != null)
@@ -379,7 +410,7 @@ public class HeroNavigation : MonoBehaviour
                 bool isChestTarget = enemyStats.name.Contains("Chest");
                 int impactDamage = Mathf.CeilToInt(remainingMeters * (stats.currentHP / 10f));
                 
-                // Chests (Mimics) are immune to impact damage to force a real combat encounter
+                // Treasure chests are immune to impact damage to force a real combat encounter
                 if (!isChestTarget)
                 {
                     enemyStats.TakeDamage(impactDamage);
@@ -440,7 +471,13 @@ public class HeroNavigation : MonoBehaviour
     private void ResetPOIs()
     {
         availablePOIs.Clear();
-        foreach (Transform child in poiRoot) availablePOIs.Add(child);
+        foreach (Transform child in poiRoot)
+        {
+            if (child.gameObject.activeInHierarchy)
+            {
+                availablePOIs.Add(child);
+            }
+        }
         Debug.Log($"POI List Reset. {availablePOIs.Count} points available.");
     }
 }

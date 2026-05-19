@@ -32,6 +32,9 @@ public class PointOfInterest : MonoBehaviour
 
     private void Update()
     {
+        // Throttle proximity checks to once every 5 frames
+        if (Time.frameCount % 5 != 0) return;
+
         // Generic engagement check for non-patrolling enemies (Mushrooms, etc.)
         if (enemyType != EnemyType.Orc && enemyType != EnemyType.DragonBob && enemyType != EnemyType.TreasureChest)
         {
@@ -42,15 +45,16 @@ public class PointOfInterest : MonoBehaviour
     private void CheckProximityEngagement()
     {
         if (CombatSystem.Instance == null || CombatSystem.Instance.isInCombat) return;
+        if (GenericPopup.IsOpen || EquipmentLootPopup.IsOpen) return;
 
         CharacterStats stats = GetComponentInChildren<CharacterStats>();
         if (stats == null || stats.isDead) return;
 
         CharacterStats player = CombatSystem.Instance.playerStats;
-        if (player == null) return;
+        if (player == null || player.isDead) return;
 
         float dist = Vector3.Distance(transform.position, player.transform.position);
-        if (dist < engagementRadius)
+if (dist < engagementRadius)
         {
             Debug.Log($"[POI] {enemyType} at {name} engaging player at distance {dist}");
             CombatSystem.Instance.StartCombat(stats);
@@ -68,6 +72,36 @@ public class PointOfInterest : MonoBehaviour
             {
                 DestroyImmediate(existing.gameObject);
                 SpawnEnemy();
+            }
+            else
+            {
+                // Ensure existing enemies have their unique behavior components
+                switch (enemyType)
+                {
+                    case EnemyType.TreasureChest:
+                        if (existing.GetComponent<ChestEnemy>() == null) existing.gameObject.AddComponent<ChestEnemy>();
+                        var obstacle = existing.GetComponent<UnityEngine.AI.NavMeshObstacle>();
+                        if (obstacle == null) 
+                        {
+                            obstacle = existing.gameObject.AddComponent<UnityEngine.AI.NavMeshObstacle>();
+                            obstacle.carving = true;
+                            obstacle.center = new Vector3(0, 0.5f, 0);
+                            obstacle.size = new Vector3(1.2f, 1.0f, 1.2f);
+                        }
+                        break;
+                    case EnemyType.Worm:
+                        if (existing.GetComponent<WormEnemy>() == null) existing.gameObject.AddComponent<WormEnemy>();
+                        break;
+                    case EnemyType.Mushroom:
+                        if (existing.GetComponent<MushroomEnemy>() == null) existing.gameObject.AddComponent<MushroomEnemy>();
+                        break;
+                    case EnemyType.Orc:
+                        if (existing.GetComponent<OrcPatrol>() == null) existing.gameObject.AddComponent<OrcPatrol>();
+                        break;
+                    case EnemyType.DragonBob:
+                        if (existing.GetComponent<DragonBob>() == null) existing.gameObject.AddComponent<DragonBob>();
+                        break;
+                }
             }
         }
         else
@@ -115,6 +149,20 @@ public class PointOfInterest : MonoBehaviour
             stats.ResetStats();
             var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
             if (agent != null) agent.enabled = false;
+
+            if (isChest)
+            {
+                if (enemy.GetComponent<ChestEnemy>() == null) enemy.AddComponent<ChestEnemy>();
+                var obstacle = enemy.GetComponent<UnityEngine.AI.NavMeshObstacle>();
+                if (obstacle == null) obstacle = enemy.AddComponent<UnityEngine.AI.NavMeshObstacle>();
+                obstacle.carving = true;
+                obstacle.center = new Vector3(0, 0.5f, 0);
+                obstacle.size = new Vector3(1.2f, 1.0f, 1.2f);
+            }
+            else // Mushroom
+            {
+                if (enemy.GetComponent<MushroomEnemy>() == null) enemy.AddComponent<MushroomEnemy>();
+            }
         }
         else if (enemyType == EnemyType.DragonBob)
         {
@@ -125,6 +173,7 @@ public class PointOfInterest : MonoBehaviour
         else if (enemyType == EnemyType.Worm)
         {
             stats.brawn = 10; stats.grit = 8; stats.ResetStats();
+            if (enemy.GetComponent<WormEnemy>() == null) enemy.AddComponent<WormEnemy>();
         }
         else
         {

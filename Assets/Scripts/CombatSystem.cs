@@ -40,7 +40,7 @@ public class CombatSystem : MonoBehaviour
 
     public void StartCombat(CharacterStats enemy)
     {
-        if (isInCombat || enemy == null || enemy.isDead || GenericPopup.IsOpen || EquipmentLootPopup.IsOpen) 
+        if (isInCombat || enemy == null || enemy.isDead || (playerStats != null && playerStats.isDead) || GenericPopup.IsOpen || EquipmentLootPopup.IsOpen) 
         {
             if (isInCombat) Debug.LogWarning($"[CombatSystem] Cannot start combat. Already in combat.");
             return;
@@ -67,16 +67,23 @@ public class CombatSystem : MonoBehaviour
         if (pAgent != null) pAgent.enabled = false;
         if (eAgent != null && eAgent.isOnNavMesh) eAgent.isStopped = true;
 
-        Vector3 directionToPlayer = (playerStats.transform.position - enemy.transform.position).normalized;
+        // Calculate horizontal direction only to avoid vertical offsets in positioning
+        Vector3 dirToPlayer = playerStats.transform.position - enemy.transform.position;
+        dirToPlayer.y = 0;
+        Vector3 directionToPlayer = dirToPlayer.normalized;
         if (directionToPlayer.sqrMagnitude < 0.01f) directionToPlayer = Vector3.back;
 
+        // Pin the combat arena height to the player's current ground level
         Vector3 center = (playerStats.transform.position + enemy.transform.position) * 0.5f;
+        center.y = playerStats.transform.position.y; 
+
         Vector3 playerTarget = center + directionToPlayer * 1.25f;
         Vector3 enemyTarget = center - directionToPlayer * 1.25f;
 
         UnityEngine.AI.NavMeshHit hit;
-        if (UnityEngine.AI.NavMesh.SamplePosition(playerTarget, out hit, 5f, UnityEngine.AI.NavMesh.AllAreas)) playerTarget = hit.position;
-        if (UnityEngine.AI.NavMesh.SamplePosition(enemyTarget, out hit, 5f, UnityEngine.AI.NavMesh.AllAreas)) enemyTarget = hit.position;
+        // Sample NavMesh at the calculated ground positions
+        if (UnityEngine.AI.NavMesh.SamplePosition(playerTarget, out hit, 10f, UnityEngine.AI.NavMesh.AllAreas)) playerTarget = hit.position;
+        if (UnityEngine.AI.NavMesh.SamplePosition(enemyTarget, out hit, 10f, UnityEngine.AI.NavMesh.AllAreas)) enemyTarget = hit.position;
 
         Animator pAnim = playerStats.GetComponent<Animator>();
         Animator eAnim = enemy.GetComponent<Animator>();
@@ -85,53 +92,84 @@ public class CombatSystem : MonoBehaviour
         bool isDragon = enemy.name.Contains("DragonBob");
         bool isWorm = enemy.name.Contains("Worm");
 
-        if (pAnim != null) pAnim.SafeSetFloat("Speed", 1.5f);
+        if (pAnim != null) pAnim.SafeSetFloat("Speed", 1.0f); // Match walk/run speed
         if (eAnim != null)
         {
-            if (isChest) eAnim.CrossFade("WalkFWD", 0.1f);
-            else if (!isDragon && !isWorm) eAnim.SafeSetFloat("Speed", 1.5f);
+            if (isChest) eAnim.CrossFade("WalkFWD", 0.15f);
+            else if (!isDragon && !isWorm) eAnim.SafeSetFloat("Speed", 1.0f);
         }
 
-        float duration = 0.8f; 
-        float elapsed = 0;
         Vector3 pStart = playerStats.transform.position;
         Vector3 eStart = enemy.transform.position;
+        Quaternion pStartRot = playerStats.transform.rotation;
+        Quaternion eStartRot = enemy.transform.rotation;
 
-        // If we are already close (e.g. hitting a chest/POI directly), don't force a 'jump'
+        if (camFollow != null)
+        {
+            if (combatCameraAnchor == null) combatCameraAnchor = new GameObject("CombatCameraAnchor").transform;
+            
+            // Start camera moving toward midpoint immediately
+            Vector3 camPos = (pStart + eStart) * 0.5f;
+            camPos.y = pStart.y;
+            combatCameraAnchor.position = camPos;
+            
+            camFollow.target = combatCameraAnchor;
+            camFollow.isCombatOrbiting = true;
+        }
+
+        float duration = isChest ? 0.8f : 0.45f; // snappier yet smooth
+        float elapsed = 0;
+
+        // If we are already close, don't force a 'jump'
         if (Vector3.Distance(pStart, playerTarget) < 0.5f) duration = 0.2f;
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
-            // Smooth step curve
+            // Buttery smooth cubic curve
             float curve = t * t * (3 - 2 * t); 
 
             playerStats.transform.position = Vector3.Lerp(pStart, playerTarget, curve);
             
             Vector3 lookTarget = new Vector3(enemyTarget.x, playerStats.transform.position.y, enemyTarget.z);
             if ((lookTarget - playerStats.transform.position).sqrMagnitude > 0.001f)
-                playerStats.transform.rotation = Quaternion.Slerp(playerStats.transform.rotation, Quaternion.LookRotation(lookTarget - playerStats.transform.position), curve);
+            {
+                Quaternion targetRot = Quaternion.LookRotation(lookTarget - playerStats.transform.position);
+                playerStats.transform.rotation = Quaternion.Slerp(pStartRot, targetRot, curve);
+            }
 
-            if (!isDragon && !isWorm)
+            // Let the enemy lerp to their spot too
+            if (!isWorm)
             {
                 enemy.transform.position = Vector3.Lerp(eStart, enemyTarget, curve);
             }
             
             Vector3 eLookTarget = new Vector3(playerTarget.x, enemy.transform.position.y, playerTarget.z);
             if ((eLookTarget - enemy.transform.position).sqrMagnitude > 0.001f)
-                enemy.transform.rotation = Quaternion.Slerp(enemy.transform.rotation, Quaternion.LookRotation(eLookTarget - enemy.transform.position), curve);
+            {
+                Quaternion targetRot = Quaternion.LookRotation(eLookTarget - enemy.transform.position);
+                enemy.transform.rotation = Quaternion.Slerp(eStartRot, targetRot, curve);
+            }
+
+            // Move camera anchor as they move
+            if (combatCameraAnchor != null)
+            {
+                Vector3 currentMid = (playerStats.transform.position + enemy.transform.position) * 0.5f;
+                currentMid.y = playerStats.transform.position.y;
+                combatCameraAnchor.position = currentMid;
+            }
 
             yield return null;
         }
 
         playerStats.transform.position = playerTarget;
-        if (!isDragon && !isWorm) enemy.transform.position = enemyTarget;
+        if (!isWorm) enemy.transform.position = enemyTarget; 
         
         if (pAnim != null) pAnim.SafeSetFloat("Speed", 0f);
         if (eAnim != null)
         {
-            if (isChest) eAnim.CrossFade("IdleBattle", 0.2f);
+            if (isChest) eAnim.CrossFade("IdleBattle", 0.25f);
             else if (!isDragon && !isWorm) eAnim.SafeSetFloat("Speed", 0f);
         }
 
@@ -143,39 +181,28 @@ public class CombatSystem : MonoBehaviour
         }
         if (pAnim != null) pAnim.SafeSetTrigger("GetHit");
 
-        yield return new WaitForSeconds(isWorm ? 1.0f : 0.2f);
-
-        if (camFollow != null)
-        {
-            if (combatCameraAnchor == null) combatCameraAnchor = new GameObject("CombatCameraAnchor").transform;
-            combatCameraAnchor.position = (playerStats.transform.position + enemy.transform.position) * 0.5f;
-            camFollow.target = combatCameraAnchor;
-            camFollow.isCombatOrbiting = true;
-        }
+        yield return new WaitForSeconds(isWorm ? 0.8f : 0.15f);
 
         StartCoroutine(CombatLoop());
-    }
+        }
 
     private IEnumerator CombatLoop()
     {
         while (isInCombat)
         {
+            // Ensure enemy is always facing the player at the start of each phase
+            if (currentEnemyStats != null && !currentEnemyStats.isDead)
+            {
+                Vector3 lookPos = playerStats.transform.position;
+                lookPos.y = currentEnemyStats.transform.position.y;
+                currentEnemyStats.transform.LookAt(lookPos);
+            }
+
             if (isPlayerTurn)
             {
-                DragonBob bob = currentEnemyStats?.GetComponent<DragonBob>();
-                if (bob != null && bob.isFTUECombat)
-                {
-                    yield return new WaitForSeconds(1.0f);
-                    Animator eAnim = currentEnemyStats.GetComponent<Animator>();
-                    if (eAnim != null) eAnim.CrossFade("Scream", 0.2f);
-                    yield return new WaitForSeconds(2.0f);
-                    bob.FTUEFlyAway();
-                    EndCombat(false); 
-                    yield break;
-                }
                 yield return new WaitUntil(() => !isPlayerTurn || !isInCombat);
             }
-            else
+else
             {
                 yield return new WaitForSeconds(0.5f);
                 if (!isInCombat) break;
@@ -201,6 +228,20 @@ public class CombatSystem : MonoBehaviour
     private IEnumerator PlayerAttackSequence(int rollValue)
     {
         isAttackSequenceRunning = true;
+
+        // Energy Cost check
+        int energyCost = 5;
+        if (playerStats.currentMana < energyCost)
+        {
+            SpawnDamageText(playerStats.transform.position + Vector3.up * 2.5f, "LOW ENERGY!", new Color(0.6f, 0f, 1f));
+            yield return new WaitForSeconds(0.8f);
+            isPlayerTurn = false; // Turn ends if you try to attack without energy
+            isAttackSequenceRunning = false;
+            yield break;
+        }
+
+        playerStats.ConsumeMana(energyCost);
+        
         bool isCritical = rollValue >= playerStats.critThreshold; 
         Animator playerAnim = playerStats.GetComponent<Animator>();
         
@@ -213,6 +254,12 @@ public class CombatSystem : MonoBehaviour
         {
             isAttackSequenceRunning = false;
             yield break;
+        }
+
+        // Trigger animation
+        if (playerAnim != null)
+        {
+            playerAnim.SafeSetTrigger("Attack");
         }
 
         int baseDamage = rollValue + playerStats.MeleeDamage;
@@ -234,13 +281,12 @@ public class CombatSystem : MonoBehaviour
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
         if (enemyAnim != null)
         {
-            bool isWorm = currentEnemyStats.name.Contains("Worm");
-            if (isWorm) enemyAnim.CrossFade("GetHit", 0.05f);
+            if (currentEnemyStats.name.Contains("Worm")) enemyAnim.CrossFade("GetHit", 0.05f);
             else enemyAnim.SafeSetTrigger("GetHit");
         }
 
         // Ultra fast turnaround
-        yield return new WaitForSeconds(0.4f); 
+        yield return new WaitForSeconds(0.35f); 
 
         if (currentEnemyStats != null && currentEnemyStats.currentHP <= 0)
         {
@@ -272,7 +318,7 @@ public class CombatSystem : MonoBehaviour
     {
         if (currentEnemyStats == null) yield break;
 
-        // If it's a mushroom, it shouldn't attack! (Chests are now Mimics and will fight back)
+        // If it's a mushroom, it shouldn't attack! (Chests will fight back)
         bool isPassive = currentEnemyStats.name.Contains("Mushroom");
         if (isPassive)
         {
@@ -296,38 +342,41 @@ bool isDragon = currentEnemyStats.name.Contains("DragonBob");
                 string[] attacks = { "Attack01", "Attack02", "Attack03", "Attack04" };
                 enemyAnim.CrossFade(attacks[Random.Range(0, attacks.Length)], 0.2f);
             }
-            else enemyAnim.SafeSetTrigger("Attack");
+            else 
+            {
+                enemyAnim.SafeSetTrigger("Attack");
+            }
         }
 
         // Faster enemy impact
-        yield return new WaitForSeconds(0.25f);
+        yield return new WaitForSeconds(0.2f);
 
-        int enemyRoll = Random.Range(1, 13);
-        bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
-        int damage = enemyRoll + currentEnemyStats.MeleeDamage;
-        if (isCritical) damage *= 2;
+            int enemyRoll = Random.Range(1, 13);
+            bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
+            int damage = enemyRoll + currentEnemyStats.MeleeDamage;
+            if (isCritical) damage *= 2;
 
-        playerStats.TakeDamage(damage);
-        SpawnDamageText(playerStats.transform.position + Vector3.up * 2f, $"{(isCritical ? "CRITICAL! -" : "-")}{damage}", Color.red);
+            playerStats.TakeDamage(damage);
+            SpawnDamageText(playerStats.transform.position + Vector3.up * 2f, $"{(isCritical ? "CRITICAL! -" : "-")}{damage}", Color.red);
         
-        if (hitEffectPrefab != null)
-        {
+            if (hitEffectPrefab != null)
+            {
             GameObject fx = Instantiate(hitEffectPrefab, playerStats.transform.position + Vector3.up * 1.5f, Quaternion.identity);
             Destroy(fx, 2f);
-        }
+            }
 
-        if (camFollow != null) camFollow.Shake(0.12f, isCritical ? 0.3f : 0.15f);
+            if (camFollow != null) camFollow.Shake(0.12f, isCritical ? 0.3f : 0.15f);
 
-        Animator playerAnim = playerStats.GetComponent<Animator>();
-        if (playerAnim != null) playerAnim.SafeSetTrigger("GetHit");
+            Animator playerAnim = playerStats.GetComponent<Animator>();
+            if (playerAnim != null) playerAnim.SafeSetTrigger("GetHit");
 
-        // Stop sequence if player is dead
-        if (playerStats.isDead) yield break;
+            // Stop sequence if player is dead
+            if (playerStats.isDead) yield break;
 
-        // Faster turnaround for next turn
-        yield return new WaitForSeconds(0.5f);
-        if (isDragon && enemyAnim != null) enemyAnim.CrossFade("Fly Float", 0.5f);
-        }
+            // Faster turnaround for next turn
+            yield return new WaitForSeconds(0.4f);
+            if (isDragon && enemyAnim != null) enemyAnim.CrossFade("Fly Float", 0.5f);
+}
 
         public static void SpawnText(Vector3 position, string text, Color color)
         {

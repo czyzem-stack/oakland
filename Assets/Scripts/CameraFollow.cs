@@ -77,11 +77,13 @@ public class CameraFollow : MonoBehaviour
         Vector3 desiredPosition = target.position + offset;
         
         // Smoothly move the camera
-        transform.position = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed) + shakeOffset;
+        float t = 1.0f - Mathf.Exp(-smoothSpeed * Time.deltaTime * 10f);
+        transform.position = Vector3.Lerp(transform.position, desiredPosition, t) + shakeOffset;
         
         // Always look at the target
-transform.LookAt(target.position + Vector3.up * 1.5f); 
-    }
+        Vector3 targetLookPos = target.position + Vector3.up * 1.5f;
+        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(targetLookPos - transform.position), t);
+        }
 
     private void ApplyPresets()
     {

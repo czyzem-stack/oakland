@@ -35,10 +35,11 @@ public class DiceRollSystem : MonoBehaviour
     public Text resultText;
     public Animator steveAnimator;
     public HeroNavigation heroNav;
+    private CharacterStats cachedStats;
     private Transform weaponPoint;
 
     private List<GameObject> activeDice = new List<GameObject>();
-    private List<Rigidbody> activeDiceRBs = new List<Rigidbody>();
+private List<Rigidbody> activeDiceRBs = new List<Rigidbody>();
     public bool isRolling = false;
     public bool autoRoll = false;
     private float nextAutoRollTime;
@@ -134,6 +135,12 @@ public class DiceRollSystem : MonoBehaviour
             if (heroNav == null) heroNav = GetComponentInChildren<HeroNavigation>();
         }
 
+        if (cachedStats == null)
+        {
+            cachedStats = GetComponentInParent<CharacterStats>();
+            if (cachedStats == null) cachedStats = GetComponentInChildren<CharacterStats>();
+        }
+
         if (weaponPoint == null && steveAnimator != null)
         {
             Transform[] allChildren = steveAnimator.GetComponentsInChildren<Transform>();
@@ -154,14 +161,13 @@ public class DiceRollSystem : MonoBehaviour
         {
             if (isRolling || IsSteveBusy() || GenericPopup.IsOpen) return false;
 
-            CharacterStats stats = GetComponentInParent<CharacterStats>();
-            if (stats == null) stats = GetComponentInChildren<CharacterStats>();
-            if (stats == null) return false;
+            if (cachedStats == null) RefreshReferences();
+            if (cachedStats == null || cachedStats.isDead) return false;
 
             // In combat, we can always roll (safety net for soft-locks)
             if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return true;
 
-            return stats.currentMana >= 1;
+            return cachedStats.currentMana >= 1;
         }
     }
 
@@ -191,13 +197,11 @@ public class DiceRollSystem : MonoBehaviour
         // Consume 1 Energy per roll only if NOT in combat
         if (!inCombat)
         {
-            CharacterStats stats = GetComponentInParent<CharacterStats>();
-            if (stats == null) stats = GetComponentInChildren<CharacterStats>();
-            if (stats != null) stats.ConsumeMana(1);
+            if (cachedStats != null) cachedStats.ConsumeMana(1);
         }
 
         StartCoroutine(RollRoutine(inCombat));
-    }
+        }
 
     private bool IsSteveBusy()
     {
@@ -245,12 +249,11 @@ public class DiceRollSystem : MonoBehaviour
             // 2. Spawn in World Space
             if (worldDiceContainer == null)
             {
-                worldDiceContainer = GameObject.Find("WorldDiceContainer");
-                if (worldDiceContainer == null) worldDiceContainer = new GameObject("WorldDiceContainer");
+                worldDiceContainer = GameObject.Find("WorldDiceContainer") ?? new GameObject("WorldDiceContainer");
             }
 
             Vector3 baseSpawnPos = transform.position + spawnOffset;
-            if (isCombatRoll && weaponPoint != null) 
+if (isCombatRoll && weaponPoint != null) 
             {
                 baseSpawnPos = weaponPoint.position;
             }
@@ -367,8 +370,7 @@ public class DiceRollSystem : MonoBehaviour
 
     private void ApplyResult(int total, bool isDoubles)
     {
-        CharacterStats pStats = GetComponentInParent<CharacterStats>();
-        if (pStats == null) pStats = GetComponentInChildren<CharacterStats>();
+        if (cachedStats == null) RefreshReferences();
 
         if (resultText != null) 
         {
@@ -378,9 +380,9 @@ public class DiceRollSystem : MonoBehaviour
         }
 
         bool inCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat;
-        if (pStats != null && !inCombat)
+        if (cachedStats != null && !inCombat)
         {
-            pStats.AddXP(total);
+            cachedStats.AddXP(total);
         }
 
         OnAnyDiceRolled?.Invoke(total);

@@ -61,8 +61,11 @@ public class OrcPatrol : MonoBehaviour
             return; 
         }
 
+        // Throttle distance checks
+        if (Time.frameCount % 4 != 0) return;
+
         // Check for Player (Steve) engagement
-        if (!isFleeing && !isPatrolling && CombatSystem.Instance != null && !CombatSystem.Instance.isInCombat)
+if (!isFleeing && !isPatrolling && CombatSystem.Instance != null && !CombatSystem.Instance.isInCombat)
         {
              // If we were paused but not in combat, resume patrolling
              isPatrolling = true;
@@ -70,17 +73,19 @@ public class OrcPatrol : MonoBehaviour
 
         if (isPatrolling && !isFleeing && CombatSystem.Instance != null && !CombatSystem.Instance.isInCombat)
         {
+            if (GenericPopup.IsOpen || EquipmentLootPopup.IsOpen) return;
+            if (CombatSystem.Instance.playerStats != null && CombatSystem.Instance.playerStats.isDead) return;
+
             float engageDist = (parentPOI != null) ? parentPOI.engagementRadius : 6.0f;
-            float distToPlayer = Vector3.Distance(transform.position, CombatSystem.Instance.playerStats.transform.position);
+float distToPlayer = Vector3.Distance(transform.position, CombatSystem.Instance.playerStats.transform.position);
             
             if (distToPlayer < engageDist)
             {
-                Debug.Log($"[OrcPatrol] {name} engaging player at distance {distToPlayer}");
                 CombatSystem.Instance.StartCombat(characterStats);
                 return;
             }
         }
-        
+
         // Check for Bob
         if (bob != null && !isFleeing)
         {
