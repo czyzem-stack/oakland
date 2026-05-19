@@ -52,22 +52,60 @@ public class CharacterStats : MonoBehaviour
     public int MaxXP => cachedMaxXP;
     
     public int MaxStamina => maxStamina;
-    public int MeleeDamage => brawn;
-    public int RangedDamage => finesse;
-    public int Defense => finesse / 2;
-
-    private void RefreshCachedStats()
+    
+    public int MeleeDamage 
     {
-        cachedMaxHP = brawn * 5 + 10;
-        cachedMaxMana = grit * 3 + 10;
-        cachedMaxXP = (int)(100 * Mathf.Pow(1.5f, level - 1));
+        get 
+        {
+            int effectiveBrawn = brawn + (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Brawn") : 0);
+            int atkBonus = (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Attack") : 0);
+            return effectiveBrawn + atkBonus;
+        }
     }
+
+    public int RangedDamage 
+    {
+        get 
+        {
+            int effectiveFinesse = finesse + (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Finesse") : 0);
+            int atkBonus = (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Attack") : 0);
+            return effectiveFinesse + atkBonus;
+        }
+    }
+
+    public int Defense 
+    {
+        get 
+        {
+            int effectiveFinesse = finesse + (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Finesse") : 0);
+            return effectiveFinesse / 2;
+        }
+    }
+
+    public void RefreshCachedStats()
+    {
+        int effectiveBrawn = brawn + (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Brawn") : 0);
+        int effectiveGrit = grit + (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Grit") : 0);
+        
+        cachedMaxHP = effectiveBrawn * 5 + 10;
+        cachedMaxMana = effectiveGrit * 3 + 10;
+        cachedMaxXP = (int)(100 * Mathf.Pow(1.5f, level - 1));
+
+        // Visual Growth - Steve gets slightly bigger as he levels up
+        float scale = 1.0f + (level - 1) * 0.1f; // Steve grows by 10% per level
+        transform.localScale = Vector3.one * scale;
+        Debug.Log($"[CharacterStats] {name} Refreshed. Level: {level}, Scale: {scale}, MaxHP: {cachedMaxHP}");
+        }
 
     public void AddXP(float amount)
     {
-        if (isDead) return;
+        if (isDead) 
+        {
+            Debug.LogWarning($"[CharacterStats] {name} is dead. Ignoring {amount} XP. If alive, check life reset.");
+            return;
+        }
         currentXP += amount;
-        Debug.Log($"[CharacterStats] Gained {amount} XP. Current: {currentXP}/{MaxXP}");
+        Debug.Log($"[CharacterStats] {name} gained {amount} XP. Current: {currentXP}/{MaxXP}");
         
         CombatSystem.SpawnText(transform.position + Vector3.up * 2.5f, $"+{amount} XP", Color.cyan);
 
@@ -222,7 +260,8 @@ public class CharacterStats : MonoBehaviour
     }
 
     private void Awake()
-{
+    {
+        isDead = false;
         LoadPermStats();
         RefreshCachedStats();
         currentHP = MaxHP;

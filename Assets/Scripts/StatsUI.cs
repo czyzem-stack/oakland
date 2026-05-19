@@ -24,10 +24,32 @@ public class StatsUI : MonoBehaviour
     {
         if (stats == null) return;
 
-        if (brawnText != null) brawnText.text = $"Brawn: {stats.brawn}";
-        if (finesseText != null) finesseText.text = $"Finesse: {stats.finesse}";
-        if (witText != null) witText.text = $"Wit: {stats.wit}";
-        if (gritText != null) gritText.text = $"Grit: {stats.grit}";
+        EquipmentManager em = EquipmentManager.Instance;
+
+        if (brawnText != null) 
+        {
+            int bonus = em != null ? em.GetBonus("Brawn") : 0;
+            string bonusText = bonus != 0 ? $" (+{bonus})" : "";
+            brawnText.text = $"Brawn: {stats.brawn}{bonusText}";
+        }
+        if (finesseText != null) 
+        {
+            int bonus = em != null ? em.GetBonus("Finesse") : 0;
+            string bonusText = bonus != 0 ? $" (+{bonus})" : "";
+            finesseText.text = $"Finesse: {stats.finesse}{bonusText}";
+        }
+        if (witText != null) 
+        {
+            int bonus = em != null ? em.GetBonus("Wit") : 0;
+            string bonusText = bonus != 0 ? $" (+{bonus})" : "";
+            witText.text = $"Wit: {stats.wit}{bonusText}";
+        }
+        if (gritText != null) 
+        {
+            int bonus = em != null ? em.GetBonus("Grit") : 0;
+            string bonusText = bonus != 0 ? $" (+{bonus})" : "";
+            gritText.text = $"Grit: {stats.grit}{bonusText}";
+        }
 
         if (hpText != null) hpText.text = $"HP: {stats.currentHP:F0} / {stats.MaxHP}";
         if (mpText != null) 

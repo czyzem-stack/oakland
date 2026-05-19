@@ -336,6 +336,7 @@ public class HeroNavigation : MonoBehaviour
 
     public void ResumeAfterCombat()
     {
+        if (stats != null) stats.isDead = false; // Always clear death state when resuming
         EnsureComponents();
         TryWarpToNavMesh();
         if (remainingMeters > 0.1f) StartMoving();

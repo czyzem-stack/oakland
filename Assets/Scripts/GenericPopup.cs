@@ -219,13 +219,16 @@ public class GenericPopup : MonoBehaviour
         }
 
         GameObject instance = UnityEngine.Object.Instantiate(prefab, targetCanvas.transform);
+        Debug.Log($"[GenericPopup] Instantiated on Canvas: {targetCanvas.name}");
+        
         GenericPopup popup = instance.GetComponent<GenericPopup>();
         popup.Setup(title, message, confirmLabel, cancelLabel, thirdLabel, confirmAction, cancelAction, thirdAction);
         
-        // Ensure it's centered and fills if needed (though prefab should handle this)
+        // Ensure it's centered and has correct scale
         RectTransform rt = instance.GetComponent<RectTransform>();
         rt.anchoredPosition = Vector2.zero;
         rt.localPosition = Vector3.zero;
+        rt.localScale = Vector3.one;
 
         return popup;
     }

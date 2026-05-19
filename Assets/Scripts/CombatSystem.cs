@@ -410,20 +410,160 @@ t.fontSize = 60;
 
     public void ShowChestUpgradePopup()
     {
-        string[] statNames = { "Brawn", "Finesse", "Wit", "Grit" };
-        List<string> choices = new List<string>(statNames);
+        EquipmentManager em = EquipmentManager.Instance;
+        if (em == null)
+        {
+            Debug.LogError("EquipmentManager Instance is null");
+            return;
+        }
 
-        string s1 = choices[Random.Range(0, choices.Count)];
-        choices.Remove(s1);
-        string s2 = choices[Random.Range(0, choices.Count)];
+        // Option 1: Armor (Helmet, Chest, Cloak, Gloves, or Boots)
+        EquipmentItem armor;
+        Sprite armorIcon;
+        float armorRoll = UnityEngine.Random.value;
+        
+        if (armorRoll < 0.2f)
+        {
+            // Randomly pick one of the 5 armors
+            int armorIndex = UnityEngine.Random.Range(0, 5);
+            string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
+            int[] gritBonuses = { 1, 2, 2, 3, 3 };
+            int[] brawnBonuses = { 0, 0, 1, 0, 2 };
 
-        GenericPopup.Show(
-            "CHEST LOOTED",
-            "Inside the chest you find ancient knowledge! Choose a stat to enhance:",
-            s1, s2, null,
-            () => ApplyChestUpgrade(s1),
-            () => ApplyChestUpgrade(s2)
+            armor = new EquipmentItem {
+                name = armorNames[armorIndex],
+                slot = EquipmentSlot.Chest,
+                gritBonus = gritBonuses[armorIndex],
+                brawnBonus = brawnBonuses[armorIndex]
+            };
+            armorIcon = em.chestIcons.Length > armorIndex ? em.chestIcons[armorIndex] : null;
+        }
+        else if (armorRoll < 0.4f)
+        {
+            // Randomly pick one of the 5 helmets
+            int helmetIndex = UnityEngine.Random.Range(0, 5);
+            string[] helmetNames = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
+            int[] witBonuses = { 1, 1, 2, 2, 2 };
+            int[] gritBonuses = { 0, 1, 0, 1, 1 };
+
+            armor = new EquipmentItem {
+                name = helmetNames[helmetIndex],
+                slot = EquipmentSlot.Helmet,
+                witBonus = witBonuses[helmetIndex],
+                gritBonus = gritBonuses[helmetIndex]
+            };
+            armorIcon = em.helmetIcons.Length > helmetIndex ? em.helmetIcons[helmetIndex] : null;
+        }
+        else if (armorRoll < 0.6f)
+        {
+            // Randomly pick one of the 3 cloaks
+            int cloakIndex = UnityEngine.Random.Range(0, 3);
+            string[] cloakNames = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
+            int[] witBonuses = { 1, 2, 2 };
+            int[] gritBonuses = { 1, 1, 3 };
+
+            armor = new EquipmentItem {
+                name = cloakNames[cloakIndex],
+                slot = EquipmentSlot.Cloak,
+                witBonus = witBonuses[cloakIndex],
+                gritBonus = gritBonuses[cloakIndex]
+            };
+            armorIcon = em.cloakIcons.Length > cloakIndex ? em.cloakIcons[cloakIndex] : null;
+        }
+        else if (armorRoll < 0.8f)
+        {
+            // Randomly pick one of the 3 gloves
+            int gloveIndex = UnityEngine.Random.Range(0, 3);
+            string[] gloveNames = { "Leather Gloves", "Plate Gauntlets", "Silk Mitts" };
+            int[] brawnBonuses = { 1, 2, 0 };
+            int[] witBonuses = { 0, 0, 2 };
+
+            armor = new EquipmentItem {
+                name = gloveNames[gloveIndex],
+                slot = EquipmentSlot.Gloves,
+                brawnBonus = brawnBonuses[gloveIndex],
+                witBonus = witBonuses[gloveIndex]
+            };
+            armorIcon = em.gloveIcons.Length > gloveIndex ? em.gloveIcons[gloveIndex] : null;
+        }
+        else
+        {
+            // Randomly pick one of the 3 boots
+            int bootIndex = UnityEngine.Random.Range(0, 3);
+            string[] bootNames = { "Leather Boots", "Iron Greaves", "Swift Shoes" };
+            int[] finesseBonuses = { 1, 0, 2 };
+            int[] gritBonuses = { 0, 2, 0 };
+
+            armor = new EquipmentItem {
+                name = bootNames[bootIndex],
+                slot = EquipmentSlot.Boots,
+                finesseBonus = finesseBonuses[bootIndex],
+                gritBonus = gritBonuses[bootIndex]
+            };
+            armorIcon = em.bootIcons.Length > bootIndex ? em.bootIcons[bootIndex] : null;
+        }
+
+        // Option 2: Weapon
+        EquipmentItem weapon;
+        Sprite weaponIcon;
+        
+        int weaponRoll = UnityEngine.Random.Range(0, 10); // More variety now
+        
+        if (weaponRoll == 0)
+        {
+            weapon = new EquipmentItem { name = "Hunting Bow", slot = EquipmentSlot.Weapon, attackBonus = 2 };
+            weaponIcon = em.weaponIcons.Length > 0 ? em.weaponIcons[0] : null; // Index 0: Bow
+        }
+        else if (weaponRoll == 1)
+        {
+            weapon = new EquipmentItem { name = "Iron Spear", slot = EquipmentSlot.Weapon, attackBonus = 3 };
+            weaponIcon = em.weaponIcons.Length > 1 ? em.weaponIcons[1] : null; // Index 1: Spear
+        }
+        else if (weaponRoll == 2)
+        {
+            weapon = new EquipmentItem { name = "Iron Sword 03", slot = EquipmentSlot.Weapon, attackBonus = 3 };
+            weaponIcon = em.weaponIcons.Length > 2 ? em.weaponIcons[2] : null; // Index 2: Sword
+        }
+        else if (weaponRoll == 3)
+        {
+            weapon = new EquipmentItem { name = "War Axe 10", slot = EquipmentSlot.Weapon, attackBonus = 4 };
+            weaponIcon = em.weaponIcons.Length > 3 ? em.weaponIcons[3] : null; // Index 3: Axe
+        }
+        else if (weaponRoll == 4)
+        {
+            weapon = new EquipmentItem { name = "War Hammer 11", slot = EquipmentSlot.Weapon, attackBonus = 4 };
+            weaponIcon = em.weaponIcons.Length > 4 ? em.weaponIcons[4] : null; // Index 4: Hammer
+        }
+        else if (weaponRoll == 5)
+        {
+            weapon = new EquipmentItem { name = "Iron Greatsword 01", slot = EquipmentSlot.Weapon, attackBonus = 5 };
+            weaponIcon = em.weaponIcons.Length > 5 ? em.weaponIcons[5] : null; // Index 5: THS
+        }
+        else if (weaponRoll == 6)
+        {
+            weapon = new EquipmentItem { name = "Magic Wand 01", slot = EquipmentSlot.Weapon, attackBonus = 3, witBonus = 2 };
+            weaponIcon = em.weaponIcons.Length > 6 ? em.weaponIcons[6] : null; // Index 6: Wand
+        }
+        else
+        {
+            weapon = new EquipmentItem { name = "Stronger Stick", slot = EquipmentSlot.Weapon, attackBonus = 2 };
+            weaponIcon = em.weaponIcons.Length > 7 ? em.weaponIcons[7] : null; // Index 7: Stick
+        }
+
+        EquipmentLootPopup.Show(
+            armor, 
+            weapon, 
+            armorIcon, 
+            weaponIcon, 
+            () => { em.Equip(armor); ResumeAfterChest(); }, 
+            () => { em.Equip(weapon); ResumeAfterChest(); }
         );
+    }
+
+    private void ResumeAfterChest()
+    {
+        var nav = playerStats.GetComponent<HeroNavigation>();
+        if (nav != null) nav.ResumeAfterCombat();
     }
 
     private void ApplyChestUpgrade(string statName)
@@ -431,7 +571,6 @@ t.fontSize = 60;
         if (playerStats == null) return;
         playerStats.ApplyStatUpgrade(statName, 2, true);
 
-        var nav = playerStats.GetComponent<HeroNavigation>();
-        if (nav != null) nav.ResumeAfterCombat();
+        ResumeAfterChest();
     }
 }
