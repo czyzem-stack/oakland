@@ -27,6 +27,7 @@ public class AutoRollButton : MonoBehaviour, IPointerDownHandler, IPointerUpHand
 
     public void OnPointerDown(PointerEventData eventData)
     {
+        if (GenericPopup.IsOpen) return;
         isPointerDown = true;
         pointerDownTime = Time.time;
         longPressTriggered = false;
@@ -34,6 +35,12 @@ public class AutoRollButton : MonoBehaviour, IPointerDownHandler, IPointerUpHand
 
     public void OnPointerUp(PointerEventData eventData)
     {
+        if (GenericPopup.IsOpen)
+        {
+            isPointerDown = false;
+            return;
+        }
+
         if (isPointerDown && !longPressTriggered)
         {
             // Single Click
@@ -49,6 +56,8 @@ public class AutoRollButton : MonoBehaviour, IPointerDownHandler, IPointerUpHand
 
     private void Update()
     {
+        if (GenericPopup.IsOpen) return;
+
         if (isPointerDown && !longPressTriggered)
         {
             if (Time.time - pointerDownTime >= longPressThreshold)

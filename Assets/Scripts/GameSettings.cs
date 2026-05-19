@@ -10,15 +10,18 @@ public class GameSettings : MonoBehaviour
 
     private void Awake()
     {
+        Time.timeScale = 1f;
+        GenericPopup.ResetForSceneLoad();
+
         if (Instance == null)
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
             Application.targetFrameRate = 60;
-            QualitySettings.vSyncCount = 0; 
+            QualitySettings.vSyncCount = 0;
         }
         else
-{
+        {
             Destroy(gameObject);
         }
     }

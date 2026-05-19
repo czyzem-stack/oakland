@@ -373,7 +373,10 @@ t.fontSize = 60;
         if (agent != null)
         {
             agent.enabled = true;
-            if (UnityEngine.AI.NavMesh.SamplePosition(playerStats.transform.position, out UnityEngine.AI.NavMeshHit hit, 10.0f, UnityEngine.AI.NavMesh.AllAreas))
+            var nav = playerStats.GetComponent<HeroNavigation>();
+            if (nav != null)
+                nav.EnsureOnNavMesh();
+            else if (UnityEngine.AI.NavMesh.SamplePosition(playerStats.transform.position, out UnityEngine.AI.NavMeshHit hit, 10.0f, UnityEngine.AI.NavMesh.AllAreas))
             {
                 agent.Warp(hit.position);
             }

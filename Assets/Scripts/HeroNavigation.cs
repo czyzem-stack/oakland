@@ -6,9 +6,11 @@ using System.Collections.Generic;
 [RequireComponent(typeof(Animator))]
 public class HeroNavigation : MonoBehaviour
 {
+    private const int NavSampleMask = NavMesh.AllAreas;
+
     [Header("Navigation Settings")]
     public Transform poiRoot;
-    public float metersPerDicePoint = 2.5f; // Increased from 1.0 for longer strides
+    public float metersPerDicePoint = 2.5f;
     public float arrivalDistance = 1.0f;
     public GameObject coinPrefab;
     public GameObject wormPrefab;
@@ -28,7 +30,7 @@ public class HeroNavigation : MonoBehaviour
     private float metersTraveledSinceLastCoin = 0f;
     private bool spawnedCoinsForCurrentTarget = false;
 
-    private static int rollsCount = 0;
+    private int rollsCount = 0;
 
     public void TrySpawnWorm(Vector3 position)
     {
@@ -39,21 +41,19 @@ public class HeroNavigation : MonoBehaviour
         if (Random.value < 0.1f)
         {
             Debug.Log("[HeroNavigation] WORM AMBUSH!");
-            
-            // Adjust position to ground level (subtracting the coin's float offset)
-            // and sink it slightly into the ground for a better "buried" look.
+
             Vector3 spawnPos = position;
-            if (UnityEngine.AI.NavMesh.SamplePosition(position, out UnityEngine.AI.NavMeshHit hit, 3.0f, 1 << 0))
-            {
+            if (NavMesh.SamplePosition(position, out NavMeshHit hit, 3.0f, NavSampleMask))
                 spawnPos = hit.position;
-            }
-            spawnPos.y -= 0.25f; // Sink him slightly
+            spawnPos.y -= 0.25f;
 
             GameObject worm = Instantiate(wormPrefab, spawnPos, Quaternion.identity);
             worm.name = "WormMonster_" + System.Guid.NewGuid().ToString().Substring(0, 5);
-CharacterStats wormStats = worm.GetComponent<CharacterStats>();
+            CharacterStats wormStats = worm.GetComponent<CharacterStats>();
             if (wormStats == null) wormStats = worm.AddComponent<CharacterStats>();
-            wormStats.brawn = 15; wormStats.grit = 10; wormStats.ResetStats();
+            wormStats.brawn = 15;
+            wormStats.grit = 10;
+            wormStats.ResetStats();
 
             PointOfInterest poi = Object.FindAnyObjectByType<PointOfInterest>();
             if (poi != null && poi.healthCanvasPrefab != null)
@@ -64,13 +64,16 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
                 var bar = canvas.GetComponentInChildren<HealthBar>();
                 if (bar != null) bar.stats = wormStats;
             }
-            CombatSystem.Instance.StartCombat(wormStats);
+
+            if (CombatSystem.Instance != null)
+                CombatSystem.Instance.StartCombat(wormStats);
         }
     }
 
     public float DistanceToTarget
     {
-        get {
+        get
+        {
             if (currentTarget == null || agent == null || !agent.isOnNavMesh) return 0f;
             if (agent.pathPending) return Vector3.Distance(transform.position, currentTarget.position);
             return agent.remainingDistance;
@@ -87,15 +90,32 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
         if (mainCam == null) mainCam = Camera.main;
     }
 
+    private bool TryWarpToNavMesh(float maxDistance = 10f)
+    {
+        if (agent == null) return false;
+        if (!agent.enabled) agent.enabled = true;
+
+        if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, maxDistance, NavSampleMask))
+            agent.Warp(hit.position);
+
+        return agent.isOnNavMesh;
+    }
+
+    private bool CanControlAgent()
+    {
+        return agent != null && agent.enabled && agent.isOnNavMesh;
+    }
+
     void Start()
     {
         EnsureComponents();
-        if (agent != null) 
-        { 
-            agent.autoBraking = false; // Disable braking for more consistent speed
+        rollsCount = 0;
+        if (agent != null)
+        {
+            agent.autoBraking = false;
             agent.stoppingDistance = arrivalDistance;
-            agent.acceleration = 20f; // High acceleration for 'buttery' feel
-            agent.angularSpeed = 600f; // Fast turning
+            agent.acceleration = 20f;
+            agent.angularSpeed = 600f;
         }
         if (poiRoot != null) ResetPOIs();
         lastPosition = transform.position;
@@ -105,20 +125,21 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
     {
         if (agent == null) return;
 
-        if (agent.enabled && !agent.isOnNavMesh && Time.frameCount % 30 == 0)
+        if (GenericPopup.IsOpen)
         {
-            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5.0f, NavMesh.AllAreas)) agent.Warp(hit.position);
+            if (isMoving) StopMoving("Popup open");
+            if (animator != null) animator.SafeSetFloat("Speed", 0f);
+            return;
         }
 
-        // REMOVED: Periodic SetDestination was causing stutters/hiccups. 
-        // NavMesh carving from Bob's obstacle will be handled automatically by the agent's internal pathfinding.
+        if (agent.enabled && !agent.isOnNavMesh && isMoving && Time.frameCount % 90 == 0)
+            TryWarpToNavMesh();
 
         if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return;
 
         if (isMoving && remainingMeters > 0)
         {
-            // Ensure agent is not stopped if we have distance to cover
-            if (agent.isStopped) agent.isStopped = false;
+            if (CanControlAgent() && agent.isStopped) agent.isStopped = false;
 
             float distMoved = Vector3.Distance(transform.position, lastPosition);
             remainingMeters -= distMoved;
@@ -128,14 +149,16 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
             float speed = agent.velocity.magnitude / agent.speed;
             if (animator != null) animator.SafeSetFloat("Speed", speed);
 
-            if (currentTarget != null && !agent.pathPending && agent.isOnNavMesh && agent.remainingDistance <= agent.stoppingDistance) OnReachedPOI();
-            else if (remainingMeters <= 0) StopMoving("Out of distance");
+            if (currentTarget != null && !agent.pathPending && agent.isOnNavMesh && agent.remainingDistance <= agent.stoppingDistance)
+                OnReachedPOI();
+            else if (remainingMeters <= 0)
+                StopMoving("Out of distance");
         }
         else
         {
             if (animator != null) animator.SafeSetFloat("Speed", 0f);
             if (isMoving) StopMoving("Movement Paused");
-            lastPosition = transform.position; 
+            lastPosition = transform.position;
         }
     }
 
@@ -149,18 +172,14 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
         }
 
         EnsureComponents();
-        if (agent != null && !agent.isOnNavMesh)
-        {
-            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5.0f, NavMesh.AllAreas)) agent.Warp(hit.position);
-        }
 
         float gainedDistance = totalValue * metersPerDicePoint;
         remainingMeters += gainedDistance;
         totalDistanceForCurrentMove = gainedDistance;
-        
+
         if (currentTarget == null) SelectNextPOI();
 
-        if (currentTarget != null && agent != null && agent.isOnNavMesh)
+        if (currentTarget != null && agent != null && TryWarpToNavMesh())
         {
             if (!spawnedCoinsForCurrentTarget) SpawnCoinsAlongPath();
             StartMoving();
@@ -169,40 +188,37 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
 
     private void SpawnCoinsAlongPath()
     {
-        if (coinPrefab == null || agent == null || currentTarget == null) 
+        if (coinPrefab == null || agent == null || currentTarget == null)
         {
             Debug.LogWarning($"[HeroNavigation] Cannot spawn coins. Prefab: {coinPrefab != null}, Agent: {agent != null}, Target: {currentTarget != null}");
             return;
         }
-        
-        spawnedCoinsForCurrentTarget = true;
-        NavMeshPath path = new NavMeshPath();
-        
-        // Use NavMesh.CalculatePath instead of agent.CalculatePath for better robustness
-        Vector3 startPos = transform.position;
-        if (!agent.isOnNavMesh)
+
+        if (!agent.isOnNavMesh && !TryWarpToNavMesh())
         {
-            if (NavMesh.SamplePosition(transform.position, out NavMeshHit startHit, 5.0f, 1 << 0))
-                startPos = startHit.position;
+            Debug.LogWarning("[HeroNavigation] Cannot spawn coins — agent is off NavMesh.");
+            return;
         }
 
+        spawnedCoinsForCurrentTarget = true;
+        NavMeshPath path = new NavMeshPath();
+
         Vector3 targetPos = currentTarget.position;
-        if (NavMesh.SamplePosition(targetPos, out NavMeshHit endHit, 5.0f, NavMesh.AllAreas))
+        if (NavMesh.SamplePosition(targetPos, out NavMeshHit endHit, 5.0f, NavSampleMask))
             targetPos = endHit.position;
 
-        // Use agent.CalculatePath to ensure NavMeshLink traversal is considered
         if (agent.CalculatePath(targetPos, path))
         {
             float currentDist = 0;
-            float coinInterval = 5.0f; // Every other step (2.5m * 2)
-            float nextCoinDist = 5.0f; 
+            float coinInterval = 5.0f;
+            float nextCoinDist = 5.0f;
             int spawnedCount = 0;
             int totalIterations = 0;
             List<Vector3> spawnedPositions = new List<Vector3>();
 
             for (int i = 0; i < path.corners.Length - 1; i++)
             {
-                Vector3 start = path.corners[i]; 
+                Vector3 start = path.corners[i];
                 Vector3 end = path.corners[i + 1];
                 float segmentLen = Vector3.Distance(start, end);
 
@@ -213,50 +229,52 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
 
                     float t = (nextCoinDist - currentDist) / segmentLen;
                     Vector3 spawnPos = Vector3.Lerp(start, end, Mathf.Clamp01(t));
-                    
-                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, 1 << 0)) 
+
+                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, NavSampleMask))
                         spawnPos = hit.position + Vector3.up * 0.7f;
                     else
                         spawnPos.y += 0.7f;
 
-                    // Prevent spawning too close to Steve
-                    if (Vector3.Distance(spawnPos, transform.position) < 2.0f) {
+                    if (Vector3.Distance(spawnPos, transform.position) < 2.0f)
+                    {
                         nextCoinDist += coinInterval;
                         continue;
                     }
 
-                    // Double check for nearby newly spawned coins in this batch
                     bool tooClose = false;
-                    foreach (var pos in spawnedPositions) {
+                    foreach (var pos in spawnedPositions)
+                    {
                         if (Vector3.Distance(spawnPos, pos) < 3.0f) { tooClose = true; break; }
                     }
 
-                    if (!tooClose) {
-                        // Check for existing coins in the world
+                    if (!tooClose)
+                    {
                         Collider[] existing = Physics.OverlapSphere(spawnPos, 1.5f);
-                        foreach (var col in existing) {
+                        foreach (var col in existing)
+                        {
                             if (col.GetComponent<Coin>() != null) { tooClose = true; break; }
                         }
                     }
 
-                    if (!tooClose) {
+                    if (!tooClose)
+                    {
                         GameObject coin = Instantiate(coinPrefab, spawnPos, Quaternion.identity);
-                        coin.transform.localScale = Vector3.one * 6f; 
+                        coin.transform.localScale = Vector3.one * 6f;
                         if (coin.GetComponent<Coin>() == null) coin.AddComponent<Coin>();
                         spawnedPositions.Add(spawnPos);
                         spawnedCount++;
                     }
-                    
+
                     nextCoinDist += coinInterval;
                 }
                 currentDist += segmentLen;
                 if (totalIterations > 1000) break;
             }
-    Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {currentTarget.name}. Status: {path.status}");
+            Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {currentTarget.name}. Status: {path.status}");
         }
         else
         {
-            Debug.LogError($"[HeroNavigation] NavMesh.CalculatePath failed from {startPos} to {targetPos}!");
+            Debug.LogError($"[HeroNavigation] agent.CalculatePath failed to {targetPos}!");
         }
     }
 
@@ -268,7 +286,7 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
         if (availablePOIs.Count > 0)
         {
             int index = -1;
-            if (rollsCount <= 3) // FTUE: Prioritize chests for first 3 rolls
+            if (rollsCount <= 3)
             {
                 for (int i = 0; i < availablePOIs.Count; i++)
                 {
@@ -287,46 +305,39 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
 
     private void StartMoving()
     {
-        if (currentTarget != null && agent != null && agent.isActiveAndEnabled)
-        {
-            // Safety warp if we managed to fall off the mesh (common after combat/animations)
-            if (!agent.isOnNavMesh)
-            {
-                if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5.0f, 1 << 0))
-                {
-                    agent.Warp(hit.position);
-                }
-            }
+        if (currentTarget == null || agent == null) return;
 
-            if (agent.isOnNavMesh)
-            {
-                agent.isStopped = false;
-                agent.SetDestination(currentTarget.position);
-                isMoving = true;
-                lastPosition = transform.position;
-            }
-            else
-            {
-                Debug.LogWarning($"[HeroNavigation] {gameObject.name} failed to find NavMesh to start moving.");
-                isMoving = false;
-            }
+        if (!TryWarpToNavMesh() || !CanControlAgent())
+        {
+            Debug.LogWarning($"[HeroNavigation] {gameObject.name} failed to find NavMesh to start moving.");
+            isMoving = false;
+            return;
         }
+
+        agent.isStopped = false;
+        agent.SetDestination(currentTarget.position);
+        isMoving = true;
+        lastPosition = transform.position;
     }
+
+    public bool EnsureOnNavMesh(float maxDistance = 10f) => TryWarpToNavMesh(maxDistance);
 
     public void StopMoving(string reason)
     {
         Debug.Log($"[HeroNavigation] Stopping: {reason}");
         isMoving = false;
-        if (agent != null && agent.isOnNavMesh) 
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
         {
             agent.isStopped = true;
-            agent.velocity = Vector3.zero; // Prevent gliding through targets
+            agent.velocity = Vector3.zero;
         }
         remainingMeters = Mathf.Max(0, remainingMeters);
     }
 
     public void ResumeAfterCombat()
     {
+        EnsureComponents();
+        TryWarpToNavMesh();
         if (remainingMeters > 0.1f) StartMoving();
         else StopMoving("Post-Combat Idle");
     }
@@ -340,7 +351,11 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
             {
                 int impactDamage = Mathf.CeilToInt(remainingMeters * (stats.currentHP / 10f));
                 enemyStats.TakeDamage(impactDamage);
-                if (CombatSystem.Instance != null) { CombatSystem.Instance.SpawnDamageText(enemyStats.transform.position + Vector3.up * 2f, $"IMPACT! -{impactDamage}", Color.yellow); (mainCam ?? (mainCam = Camera.main))?.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f); }
+                if (CombatSystem.Instance != null)
+                {
+                    CombatSystem.Instance.SpawnDamageText(enemyStats.transform.position + Vector3.up * 2f, $"IMPACT! -{impactDamage}", Color.yellow);
+                    (mainCam ?? (mainCam = Camera.main))?.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f);
+                }
                 if (animator != null) animator.SafeSetTrigger("Attack");
                 remainingMeters = 0;
 
@@ -365,13 +380,18 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
                 }
             }
             StopMoving("Enemy Encountered");
-            CombatSystem.Instance.StartCombat(enemyStats);
+            if (CombatSystem.Instance != null)
+                CombatSystem.Instance.StartCombat(enemyStats);
             return;
         }
 
         currentTarget = null;
         SelectNextPOI();
-        if (remainingMeters > 0.1f) { if (!spawnedCoinsForCurrentTarget) SpawnCoinsAlongPath(); StartMoving(); }
+        if (remainingMeters > 0.1f)
+        {
+            if (!spawnedCoinsForCurrentTarget) SpawnCoinsAlongPath();
+            StartMoving();
+        }
         else StopMoving("Target Reached");
     }
 

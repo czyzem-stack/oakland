@@ -152,8 +152,8 @@ public class DiceRollSystem : MonoBehaviour
     {
         get
         {
-            if (isRolling || IsSteveBusy()) return false;
-            
+            if (isRolling || IsSteveBusy() || GenericPopup.IsOpen) return false;
+
             CharacterStats stats = GetComponentInParent<CharacterStats>();
             if (stats == null) stats = GetComponentInChildren<CharacterStats>();
             if (stats == null) return false;

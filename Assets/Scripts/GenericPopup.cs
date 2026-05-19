@@ -5,6 +5,14 @@ using System;
 
 public class GenericPopup : MonoBehaviour
 {
+    private static int openCount;
+    public static bool IsOpen => openCount > 0;
+
+    public static void ResetForSceneLoad()
+    {
+        openCount = 0;
+    }
+
     [Header("UI Elements")]
     public TMP_Text titleText;
     public TMP_Text messageText;
@@ -19,6 +27,22 @@ public class GenericPopup : MonoBehaviour
     private Action onConfirm;
     private Action onCancel;
     private Action onThird;
+
+    private bool countedAsOpen;
+
+    private void OnEnable()
+    {
+        if (countedAsOpen) return;
+        countedAsOpen = true;
+        openCount++;
+    }
+
+    private void OnDestroy()
+    {
+        if (!countedAsOpen) return;
+        countedAsOpen = false;
+        openCount = Mathf.Max(0, openCount - 1);
+    }
 
     private void Awake()
     {

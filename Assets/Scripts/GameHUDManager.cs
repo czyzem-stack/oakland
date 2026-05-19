@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-[ExecuteAlways]
 public class GameHUDManager : MonoBehaviour
 {
     public CharacterStats playerStats;
@@ -81,10 +80,6 @@ if (hpFill != null) hpFill.color = Color.red;
             playerStats = PlayerReference.GetStats();
             if (playerStats == null) return;
         }
-
-        // FORCE Colors every frame to prevent overrides
-        if (hpFill != null) hpFill.color = Color.red;
-        if (xpFill != null) xpFill.color = new Color(0.1f, 0.4f, 1f);
 
         // Level
         if (playerStats.level != lastLevel || !Application.isPlaying)

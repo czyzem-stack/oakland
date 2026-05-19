@@ -301,8 +301,8 @@ string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
         PlayerPrefs.Save();
 
         Debug.Log($"[CharacterStats] Permanent Upgrade: +{amount} {statName}. Persisting to next run.");
-        
-        // Reload scene to restart the game
+
+        GenericPopup.ResetForSceneLoad();
         UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
 }

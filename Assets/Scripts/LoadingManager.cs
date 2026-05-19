@@ -21,6 +21,7 @@ public class LoadingManager : MonoBehaviour
 
     private void Start()
     {
+        GenericPopup.ResetForSceneLoad();
         if (progressBar != null) progressBar.value = 0;
         if (progressText != null) progressText.text = "0%";
         if (tapToStartText != null) tapToStartText.SetActive(false);
