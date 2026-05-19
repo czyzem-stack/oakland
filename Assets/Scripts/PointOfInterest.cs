@@ -108,8 +108,11 @@ public class PointOfInterest : MonoBehaviour
         
         if (enemyType == EnemyType.TreasureChest || enemyType == EnemyType.Mushroom)
         {
-            stats.brawn = (enemyType == EnemyType.TreasureChest) ? 10 : 12;
-            stats.finesse = 5; stats.grit = 5; stats.ResetStats();
+            bool isChest = enemyType == EnemyType.TreasureChest;
+            stats.brawn = isChest ? 18 : 12;
+            stats.grit = isChest ? 12 : 5;
+            stats.finesse = 5;
+            stats.ResetStats();
             var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
             if (agent != null) agent.enabled = false;
         }

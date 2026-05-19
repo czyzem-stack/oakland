@@ -40,9 +40,9 @@ public class CombatSystem : MonoBehaviour
 
     public void StartCombat(CharacterStats enemy)
     {
-        if (isInCombat || enemy == null || enemy.isDead) 
+        if (isInCombat || enemy == null || enemy.isDead || GenericPopup.IsOpen || EquipmentLootPopup.IsOpen) 
         {
-            Debug.LogWarning($"[CombatSystem] Cannot start combat. InCombat={isInCombat}, EnemyValid={enemy != null}");
+            if (isInCombat) Debug.LogWarning($"[CombatSystem] Cannot start combat. Already in combat.");
             return;
         }
 
@@ -81,12 +81,16 @@ public class CombatSystem : MonoBehaviour
         Animator pAnim = playerStats.GetComponent<Animator>();
         Animator eAnim = enemy.GetComponent<Animator>();
         
-        bool isStatic = enemy.name.Contains("Chest");
+        bool isChest = enemy.name.Contains("Chest");
         bool isDragon = enemy.name.Contains("DragonBob");
         bool isWorm = enemy.name.Contains("Worm");
 
         if (pAnim != null) pAnim.SafeSetFloat("Speed", 1.5f);
-        if (eAnim != null && !isStatic && !isDragon && !isWorm) eAnim.SafeSetFloat("Speed", 1.5f);
+        if (eAnim != null)
+        {
+            if (isChest) eAnim.CrossFade("WalkFWD", 0.1f);
+            else if (!isDragon && !isWorm) eAnim.SafeSetFloat("Speed", 1.5f);
+        }
 
         float duration = 0.8f; 
         float elapsed = 0;
@@ -97,7 +101,7 @@ public class CombatSystem : MonoBehaviour
         if (Vector3.Distance(pStart, playerTarget) < 0.5f) duration = 0.2f;
 
         while (elapsed < duration)
-{
+        {
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
             // Smooth step curve
@@ -107,16 +111,16 @@ public class CombatSystem : MonoBehaviour
             
             Vector3 lookTarget = new Vector3(enemyTarget.x, playerStats.transform.position.y, enemyTarget.z);
             if ((lookTarget - playerStats.transform.position).sqrMagnitude > 0.001f)
-                playerStats.transform.rotation = Quaternion.Slerp(playerStats.transform.rotation, Quaternion.LookRotation(lookTarget - playerStats.transform.position), t);
+                playerStats.transform.rotation = Quaternion.Slerp(playerStats.transform.rotation, Quaternion.LookRotation(lookTarget - playerStats.transform.position), curve);
 
-            if (!isStatic && !isDragon && !isWorm)
+            if (!isDragon && !isWorm)
             {
                 enemy.transform.position = Vector3.Lerp(eStart, enemyTarget, curve);
             }
             
             Vector3 eLookTarget = new Vector3(playerTarget.x, enemy.transform.position.y, playerTarget.z);
             if ((eLookTarget - enemy.transform.position).sqrMagnitude > 0.001f)
-                enemy.transform.rotation = Quaternion.Slerp(enemy.transform.rotation, Quaternion.LookRotation(eLookTarget - enemy.transform.position), t);
+                enemy.transform.rotation = Quaternion.Slerp(enemy.transform.rotation, Quaternion.LookRotation(eLookTarget - enemy.transform.position), curve);
 
             yield return null;
         }
@@ -125,7 +129,11 @@ public class CombatSystem : MonoBehaviour
         if (!isDragon && !isWorm) enemy.transform.position = enemyTarget;
         
         if (pAnim != null) pAnim.SafeSetFloat("Speed", 0f);
-        if (eAnim != null && !isDragon && !isWorm) eAnim.SafeSetFloat("Speed", 0f);
+        if (eAnim != null)
+        {
+            if (isChest) eAnim.CrossFade("IdleBattle", 0.2f);
+            else if (!isDragon && !isWorm) eAnim.SafeSetFloat("Speed", 0f);
+        }
 
         if (eAnim != null) 
         {
@@ -264,8 +272,16 @@ public class CombatSystem : MonoBehaviour
     {
         if (currentEnemyStats == null) yield break;
 
+        // If it's a mushroom, it shouldn't attack! (Chests are now Mimics and will fight back)
+        bool isPassive = currentEnemyStats.name.Contains("Mushroom");
+        if (isPassive)
+        {
+            yield return new WaitForSeconds(0.5f);
+            yield break;
+        }
+
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
-        bool isDragon = currentEnemyStats.name.Contains("DragonBob");
+bool isDragon = currentEnemyStats.name.Contains("DragonBob");
         bool isWorm = currentEnemyStats.name.Contains("Worm");
 
         if (enemyAnim != null)
@@ -305,13 +321,16 @@ public class CombatSystem : MonoBehaviour
         Animator playerAnim = playerStats.GetComponent<Animator>();
         if (playerAnim != null) playerAnim.SafeSetTrigger("GetHit");
 
+        // Stop sequence if player is dead
+        if (playerStats.isDead) yield break;
+
         // Faster turnaround for next turn
         yield return new WaitForSeconds(0.5f);
         if (isDragon && enemyAnim != null) enemyAnim.CrossFade("Fly Float", 0.5f);
-    }
+        }
 
-    public static void SpawnText(Vector3 position, string text, Color color)
-    {
+        public static void SpawnText(Vector3 position, string text, Color color)
+        {
         GameObject canvasGo = new GameObject("FloatingTextCanvas");
         canvasGo.transform.position = position + Vector3.up * 0.5f;
         Canvas canvas = canvasGo.AddComponent<Canvas>();
@@ -329,7 +348,7 @@ public class CombatSystem : MonoBehaviour
         
         t.font = Resources.Load<TMP_FontAsset>("Alata-Regular SDF");
         if (t.font == null) t.font = Resources.Load<TMP_FontAsset>("LiberationSans SDF"); // Fallback
-t.fontSize = 60; 
+        t.fontSize = 60; 
         t.alignment = TextAlignmentOptions.Center;
         t.textWrappingMode = TextWrappingModes.NoWrap;
         
@@ -340,237 +359,227 @@ t.fontSize = 60;
         fct.text = t;
         fct.driftSpeed = 2.0f; 
         fct.Setup(text, color);
-    }
-
-    public void SpawnDamageText(Vector3 position, string text, Color color)
-    {
-        SpawnText(position, text, color);
-    }
-
-    public void EndCombat(bool playerWon)
-    {
-        if (!isInCombat) return;
-        isInCombat = false;
-        isPlayerTurn = false;
-        isAttackSequenceRunning = false;
-
-        Animator playerAnim = playerStats.GetComponent<Animator>();
-        if (playerAnim != null)
-        {
-            playerAnim.ResetTrigger("Attack");
-            playerAnim.ResetTrigger("GetHit");
-            playerAnim.SafeSetFloat("Speed", 0f);
         }
 
-        if (camFollow != null)
+        public void SpawnDamageText(Vector3 position, string text, Color color)
         {
-            camFollow.isCombatOrbiting = false;
-            camFollow.target = playerStats.transform;
-            if (combatCameraAnchor != null) { Destroy(combatCameraAnchor.gameObject); combatCameraAnchor = null; }
+            SpawnText(position, text, color);
         }
 
-        var agent = playerStats.GetComponent<UnityEngine.AI.NavMeshAgent>();
-        if (agent != null)
+        public void EndCombat(bool playerWon)
         {
-            agent.enabled = true;
-            var nav = playerStats.GetComponent<HeroNavigation>();
-            if (nav != null)
-                nav.EnsureOnNavMesh();
-            else if (UnityEngine.AI.NavMesh.SamplePosition(playerStats.transform.position, out UnityEngine.AI.NavMeshHit hit, 10.0f, UnityEngine.AI.NavMesh.AllAreas))
+            if (!isInCombat) return;
+            isInCombat = false;
+            isPlayerTurn = false;
+            isAttackSequenceRunning = false;
+
+            Animator playerAnim = playerStats.GetComponent<Animator>();
+            if (playerAnim != null)
             {
-                agent.Warp(hit.position);
+                playerAnim.ResetTrigger("Attack");
+                playerAnim.ResetTrigger("GetHit");
+                playerAnim.SafeSetFloat("Speed", 0f);
             }
-        }
 
-        if (playerWon && currentEnemyStats != null)
-        {
-            if (playerAnim != null) playerAnim.SafeSetTrigger("Victory");
-            bool isChest = currentEnemyStats.name.Contains("TreasureChest") || currentEnemyStats.name.Contains("Chest");
-            bool isDragon = currentEnemyStats.name.Contains("DragonBob");
-            bool isOrc = currentEnemyStats.name.Contains("Orc");
+            if (playerWon)
+            {
+                // Victory cleanup
+                if (camFollow != null)
+                {
+                    camFollow.isCombatOrbiting = false;
+                    camFollow.target = playerStats.transform;
+                    if (combatCameraAnchor != null) { Destroy(combatCameraAnchor.gameObject); combatCameraAnchor = null; }
+                }
 
-            if (isOrc) GameSettings.Instance?.RegisterOrcKill();
+                var agent = playerStats.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                if (agent != null)
+                {
+                    agent.enabled = true;
+                    var nav = playerStats.GetComponent<HeroNavigation>();
+                    if (nav != null)
+                        nav.EnsureOnNavMesh();
+                    else if (UnityEngine.AI.NavMesh.SamplePosition(playerStats.transform.position, out UnityEngine.AI.NavMeshHit hit, 10.0f, UnityEngine.AI.NavMesh.AllAreas))
+                    {
+                        agent.Warp(hit.position);
+                    }
+                }
 
-            if (isChest) playerStats.AddGold(Random.Range(20, 51));
-            else if (isDragon) playerStats.AddGold(Random.Range(100, 201));
-            else playerStats.AddGold(Random.Range(5, 11));
+                if (currentEnemyStats != null)
+                {
+                    if (playerAnim != null) playerAnim.SafeSetTrigger("Victory");
+                    bool isChest = currentEnemyStats.name.Contains("TreasureChest") || currentEnemyStats.name.Contains("Chest");
+                    bool isDragon = currentEnemyStats.name.Contains("DragonBob");
+                    bool isOrc = currentEnemyStats.name.Contains("Orc");
 
-            GameObject.Destroy(currentEnemyStats.gameObject, isDragon ? 3.0f : 1.5f);
-            currentEnemyStats = null;
+                    if (isOrc) GameSettings.Instance?.RegisterOrcKill();
 
-            if (isChest)
-                ShowChestUpgradePopup();
+                    if (isChest) playerStats.AddGold(Random.Range(20, 51));
+                    else if (isDragon) playerStats.AddGold(Random.Range(100, 201));
+                    else playerStats.AddGold(Random.Range(5, 11));
+
+                    GameObject.Destroy(currentEnemyStats.gameObject, isDragon ? 3.0f : 1.5f);
+                    currentEnemyStats = null;
+
+                    if (isChest)
+                        ShowChestUpgradePopup();
+                    else
+                    {
+                        var nav = playerStats.GetComponent<HeroNavigation>();
+                        if (nav != null) nav.ResumeAfterCombat();
+                    }
+                }
+            }
             else
             {
-                var nav = playerStats.GetComponent<HeroNavigation>();
-                if (nav != null) nav.ResumeAfterCombat();
+                // Failure cleanup (Steve died)
+                StartCoroutine(PlayerDeathSequenceRoutine());
             }
         }
-    }
 
-    public void ShowChestUpgradePopup()
-    {
-        EquipmentManager em = EquipmentManager.Instance;
-        if (em == null)
+        private IEnumerator PlayerDeathSequenceRoutine()
         {
-            Debug.LogError("EquipmentManager Instance is null");
-            return;
+            // Dramatically wait while the camera still orbits Steve on the ground
+            yield return new WaitForSeconds(2.5f);
+
+            // Then show the popup
+            playerStats.ShowDeathPopup();
+
+            // Finally reset the camera (though the scene will likely reload anyway)
+            if (camFollow != null)
+            {
+                camFollow.isCombatOrbiting = false;
+                camFollow.target = playerStats.transform;
+                if (combatCameraAnchor != null) { Destroy(combatCameraAnchor.gameObject); combatCameraAnchor = null; }
+            }
         }
 
-        // Option 1: Armor (Helmet, Chest, Cloak, Gloves, or Boots)
-        EquipmentItem armor;
-        Sprite armorIcon;
-        float armorRoll = UnityEngine.Random.value;
+        private int chestsOpenedThisRun = 0;
+
+        public void ShowChestUpgradePopup()
+        {
+            EquipmentManager em = EquipmentManager.Instance;
+            if (em == null)
+            {
+                Debug.LogError("EquipmentManager Instance is null");
+                return;
+            }
+
+            chestsOpenedThisRun++;
+            bool isFirstChest = chestsOpenedThisRun == 1;
+
+            // Option 1: Primary (Always a Weapon or a Chest Armor)
+            EquipmentItem item1;
+            Sprite icon1;
         
-        if (armorRoll < 0.2f)
-        {
-            // Randomly pick one of the 5 armors
-            int armorIndex = UnityEngine.Random.Range(0, 5);
-            string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
-            int[] gritBonuses = { 1, 2, 2, 3, 3 };
-            int[] brawnBonuses = { 0, 0, 1, 0, 2 };
+            if (isFirstChest)
+            {
+                item1 = new EquipmentItem { name = "Iron Sword 03", slot = EquipmentSlot.Weapon, attackBonus = 3 };
+                icon1 = em.weaponIcons.Length > 2 ? em.weaponIcons[2] : null;
+            }
+            else if (UnityEngine.Random.value < 0.5f)
+            {
+                // Pick a Weapon
+                int weaponRoll = UnityEngine.Random.Range(0, 8);
+                string[] names = { "Hunting Bow", "Iron Spear", "Iron Sword 03", "War Axe 10", "War Hammer 11", "Iron Greatsword 01", "Magic Wand 01", "Stronger Stick" };
+                int[] bonuses = { 2, 3, 3, 4, 4, 5, 3, 2 };
+                item1 = new EquipmentItem { name = names[weaponRoll], slot = EquipmentSlot.Weapon, attackBonus = bonuses[weaponRoll] };
+                if (names[weaponRoll] == "Magic Wand 01") item1.witBonus = 2;
+                icon1 = em.weaponIcons.Length > weaponRoll ? em.weaponIcons[weaponRoll] : null;
+            }
+            else
+            {
+                // Pick a Chest Armor
+                int armorIndex = UnityEngine.Random.Range(0, 5);
+                string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
+                int[] gritBonuses = { 1, 2, 2, 3, 3 };
+                int[] brawnBonuses = { 0, 0, 1, 0, 2 };
 
-            armor = new EquipmentItem {
-                name = armorNames[armorIndex],
-                slot = EquipmentSlot.Chest,
-                gritBonus = gritBonuses[armorIndex],
-                brawnBonus = brawnBonuses[armorIndex]
-            };
-            armorIcon = em.chestIcons.Length > armorIndex ? em.chestIcons[armorIndex] : null;
-        }
-        else if (armorRoll < 0.4f)
-        {
-            // Randomly pick one of the 5 helmets
-            int helmetIndex = UnityEngine.Random.Range(0, 5);
-            string[] helmetNames = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
-            int[] witBonuses = { 1, 1, 2, 2, 2 };
-            int[] gritBonuses = { 0, 1, 0, 1, 1 };
+                item1 = new EquipmentItem {
+                    name = armorNames[armorIndex],
+                    slot = EquipmentSlot.Chest,
+                    gritBonus = gritBonuses[armorIndex],
+                    brawnBonus = brawnBonuses[armorIndex]
+                };
+                icon1 = em.chestIcons.Length > armorIndex ? em.chestIcons[armorIndex] : null;
+            }
 
-            armor = new EquipmentItem {
-                name = helmetNames[helmetIndex],
-                slot = EquipmentSlot.Helmet,
-                witBonus = witBonuses[helmetIndex],
-                gritBonus = gritBonuses[helmetIndex]
-            };
-            armorIcon = em.helmetIcons.Length > helmetIndex ? em.helmetIcons[helmetIndex] : null;
-        }
-        else if (armorRoll < 0.6f)
-        {
-            // Randomly pick one of the 3 cloaks
-            int cloakIndex = UnityEngine.Random.Range(0, 3);
-            string[] cloakNames = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
-            int[] witBonuses = { 1, 2, 2 };
-            int[] gritBonuses = { 1, 1, 3 };
-
-            armor = new EquipmentItem {
-                name = cloakNames[cloakIndex],
-                slot = EquipmentSlot.Cloak,
-                witBonus = witBonuses[cloakIndex],
-                gritBonus = gritBonuses[cloakIndex]
-            };
-            armorIcon = em.cloakIcons.Length > cloakIndex ? em.cloakIcons[cloakIndex] : null;
-        }
-        else if (armorRoll < 0.8f)
-        {
-            // Randomly pick one of the 3 gloves
-            int gloveIndex = UnityEngine.Random.Range(0, 3);
-            string[] gloveNames = { "Leather Gloves", "Plate Gauntlets", "Silk Mitts" };
-            int[] brawnBonuses = { 1, 2, 0 };
-            int[] witBonuses = { 0, 0, 2 };
-
-            armor = new EquipmentItem {
-                name = gloveNames[gloveIndex],
-                slot = EquipmentSlot.Gloves,
-                brawnBonus = brawnBonuses[gloveIndex],
-                witBonus = witBonuses[gloveIndex]
-            };
-            armorIcon = em.gloveIcons.Length > gloveIndex ? em.gloveIcons[gloveIndex] : null;
-        }
-        else
-        {
-            // Randomly pick one of the 3 boots
-            int bootIndex = UnityEngine.Random.Range(0, 3);
-            string[] bootNames = { "Leather Boots", "Iron Greaves", "Swift Shoes" };
-            int[] finesseBonuses = { 1, 0, 2 };
-            int[] gritBonuses = { 0, 2, 0 };
-
-            armor = new EquipmentItem {
-                name = bootNames[bootIndex],
-                slot = EquipmentSlot.Boots,
-                finesseBonus = finesseBonuses[bootIndex],
-                gritBonus = gritBonuses[bootIndex]
-            };
-            armorIcon = em.bootIcons.Length > bootIndex ? em.bootIcons[bootIndex] : null;
-        }
-
-        // Option 2: Weapon
-        EquipmentItem weapon;
-        Sprite weaponIcon;
+            // Option 2: Secondary (Helmet, Cloak, Gloves, Boots, or Shield)
+            EquipmentItem item2;
+            Sprite icon2;
         
-        int weaponRoll = UnityEngine.Random.Range(0, 10); // More variety now
-        
-        if (weaponRoll == 0)
-        {
-            weapon = new EquipmentItem { name = "Hunting Bow", slot = EquipmentSlot.Weapon, attackBonus = 2 };
-            weaponIcon = em.weaponIcons.Length > 0 ? em.weaponIcons[0] : null; // Index 0: Bow
-        }
-        else if (weaponRoll == 1)
-        {
-            weapon = new EquipmentItem { name = "Iron Spear", slot = EquipmentSlot.Weapon, attackBonus = 3 };
-            weaponIcon = em.weaponIcons.Length > 1 ? em.weaponIcons[1] : null; // Index 1: Spear
-        }
-        else if (weaponRoll == 2)
-        {
-            weapon = new EquipmentItem { name = "Iron Sword 03", slot = EquipmentSlot.Weapon, attackBonus = 3 };
-            weaponIcon = em.weaponIcons.Length > 2 ? em.weaponIcons[2] : null; // Index 2: Sword
-        }
-        else if (weaponRoll == 3)
-        {
-            weapon = new EquipmentItem { name = "War Axe 10", slot = EquipmentSlot.Weapon, attackBonus = 4 };
-            weaponIcon = em.weaponIcons.Length > 3 ? em.weaponIcons[3] : null; // Index 3: Axe
-        }
-        else if (weaponRoll == 4)
-        {
-            weapon = new EquipmentItem { name = "War Hammer 11", slot = EquipmentSlot.Weapon, attackBonus = 4 };
-            weaponIcon = em.weaponIcons.Length > 4 ? em.weaponIcons[4] : null; // Index 4: Hammer
-        }
-        else if (weaponRoll == 5)
-        {
-            weapon = new EquipmentItem { name = "Iron Greatsword 01", slot = EquipmentSlot.Weapon, attackBonus = 5 };
-            weaponIcon = em.weaponIcons.Length > 5 ? em.weaponIcons[5] : null; // Index 5: THS
-        }
-        else if (weaponRoll == 6)
-        {
-            weapon = new EquipmentItem { name = "Magic Wand 01", slot = EquipmentSlot.Weapon, attackBonus = 3, witBonus = 2 };
-            weaponIcon = em.weaponIcons.Length > 6 ? em.weaponIcons[6] : null; // Index 6: Wand
-        }
-        else
-        {
-            weapon = new EquipmentItem { name = "Stronger Stick", slot = EquipmentSlot.Weapon, attackBonus = 2 };
-            weaponIcon = em.weaponIcons.Length > 7 ? em.weaponIcons[7] : null; // Index 7: Stick
+            if (isFirstChest)
+            {
+                int weaponRoll = UnityEngine.Random.Range(0, 8);
+                string[] names = { "Hunting Bow", "Iron Spear", "Iron Sword 03", "War Axe 10", "War Hammer 11", "Iron Greatsword 01", "Magic Wand 01", "Stronger Stick" };
+                int[] bonuses = { 2, 3, 3, 4, 4, 5, 3, 2 };
+                if (names[weaponRoll] == "Iron Sword 03") weaponRoll = (weaponRoll + 1) % names.Length;
+
+                item2 = new EquipmentItem { name = names[weaponRoll], slot = EquipmentSlot.Weapon, attackBonus = bonuses[weaponRoll] };
+                if (names[weaponRoll] == "Magic Wand 01") item2.witBonus = 2;
+                icon2 = em.weaponIcons.Length > weaponRoll ? em.weaponIcons[weaponRoll] : null;
+            }
+            else
+            {
+                float roll = UnityEngine.Random.value;
+                if (roll < 0.2f)
+                {
+                    int idx = UnityEngine.Random.Range(0, 5);
+                    string[] names = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
+                    item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Helmet, witBonus = 1 + (idx / 2), gritBonus = idx / 2 };
+                    icon2 = em.helmetIcons.Length > idx ? em.helmetIcons[idx] : null;
+                }
+                else if (roll < 0.4f)
+                {
+                    int idx = UnityEngine.Random.Range(0, 3);
+                    string[] names = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
+                    item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Cloak, witBonus = idx + 1, gritBonus = idx + 1 };
+                    icon2 = em.cloakIcons.Length > idx ? em.cloakIcons[idx] : null;
+                }
+                else if (roll < 0.6f)
+                {
+                    int idx = UnityEngine.Random.Range(0, 3);
+                    string[] names = { "Leather Gloves", "Plate Gauntlets", "Silk Mitts" };
+                    item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Gloves, brawnBonus = (idx == 1 ? 2 : 1), witBonus = (idx == 2 ? 2 : 0) };
+                    icon2 = em.gloveIcons.Length > idx ? em.gloveIcons[idx] : null;
+                }
+                else if (roll < 0.8f)
+                {
+                    int idx = UnityEngine.Random.Range(0, 3);
+                    string[] names = { "Leather Boots", "Iron Greaves", "Swift Shoes" };
+                    item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Boots, finesseBonus = (idx == 2 ? 2 : 1), gritBonus = (idx == 1 ? 2 : 0) };
+                    icon2 = em.bootIcons.Length > idx ? em.bootIcons[idx] : null;
+                }
+                else
+                {
+                    // Shield Slot (including Log)
+                    int idx = UnityEngine.Random.Range(0, 4);
+                    string[] names = { "Log", "Iron Shield", "Steel Shield", "Magic Shield" };
+                    item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Shield, gritBonus = idx + 1, brawnBonus = idx / 2 };
+                    icon2 = (em.shieldIcons != null && em.shieldIcons.Length > idx) ? em.shieldIcons[idx] : null;
+                }
+            }
+
+            EquipmentLootPopup.Show(
+                item1, 
+                item2, 
+                icon1, 
+                icon2, 
+                () => { em.Equip(item1); ResumeAfterChest(); }, 
+                () => { em.Equip(item2); ResumeAfterChest(); }
+            );
         }
 
-        EquipmentLootPopup.Show(
-            armor, 
-            weapon, 
-            armorIcon, 
-            weaponIcon, 
-            () => { em.Equip(armor); ResumeAfterChest(); }, 
-            () => { em.Equip(weapon); ResumeAfterChest(); }
-        );
-    }
+        private void ResumeAfterChest()
+        {
+            var nav = playerStats.GetComponent<HeroNavigation>();
+            if (nav != null) nav.ResumeAfterCombat();
+        }
 
-    private void ResumeAfterChest()
-    {
-        var nav = playerStats.GetComponent<HeroNavigation>();
-        if (nav != null) nav.ResumeAfterCombat();
-    }
+        private void ApplyChestUpgrade(string statName)
+        {
+            if (playerStats == null) return;
+            playerStats.ApplyStatUpgrade(statName, 2, true);
 
-    private void ApplyChestUpgrade(string statName)
-    {
-        if (playerStats == null) return;
-        playerStats.ApplyStatUpgrade(statName, 2, true);
-
-        ResumeAfterChest();
-    }
-}
+            ResumeAfterChest();
+        }
+        }

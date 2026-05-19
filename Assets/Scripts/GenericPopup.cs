@@ -11,6 +11,7 @@ public class GenericPopup : MonoBehaviour
     public static void ResetForSceneLoad()
     {
         openCount = 0;
+        Time.timeScale = 1f;
     }
 
     [Header("UI Elements")]
@@ -35,6 +36,7 @@ public class GenericPopup : MonoBehaviour
         if (countedAsOpen) return;
         countedAsOpen = true;
         openCount++;
+        Time.timeScale = 0f;
     }
 
     private void OnDestroy()
@@ -42,6 +44,7 @@ public class GenericPopup : MonoBehaviour
         if (!countedAsOpen) return;
         countedAsOpen = false;
         openCount = Mathf.Max(0, openCount - 1);
+        if (openCount == 0 && !EquipmentLootPopup.IsOpen) Time.timeScale = 1f;
     }
 
     private void Awake()

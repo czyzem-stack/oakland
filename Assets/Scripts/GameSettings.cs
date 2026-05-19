@@ -12,6 +12,7 @@ public class GameSettings : MonoBehaviour
     {
         Time.timeScale = 1f;
         GenericPopup.ResetForSceneLoad();
+        EquipmentLootPopup.ResetForSceneLoad();
 
         if (Instance == null)
         {

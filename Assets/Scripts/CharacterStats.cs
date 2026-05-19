@@ -1,12 +1,13 @@
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 
 public class CharacterStats : MonoBehaviour
 {
     [Header("Base Stats")]
-    public int brawn = 14;
+    public int brawn = 16;
     public int finesse = 12;
-    public int wit = 10;
+public int wit = 10;
     public int grit = 12;
 
     [Header("Combat Stats")]
@@ -14,7 +15,7 @@ public class CharacterStats : MonoBehaviour
 
     [Header("Current State")]
     public float currentHP;
-    public float currentMana; // Mana becomes Energy
+    public float currentMana; 
     public float currentStamina;
     public float currentXP;
     public int coins;
@@ -32,17 +33,16 @@ public class CharacterStats : MonoBehaviour
 
     [Header("Settings")]
     public int manaRegenPerInterval = 1;
-    public float regenInterval = 5.0f; // Reduced from 15.0f for better flow
+    public float regenInterval = 5.0f;
     private float regenTimer = 0f;
 
     public int maxXP = 100;
     public int maxStamina = 100;
     public int level = 1;
-    public float amountPerKill = 5f; // New: amount per kill multiplier
+    public float amountPerKill = 5f;
 
-    public float RegenTimeRemaining => (currentMana < cachedMaxMana) ? Mathf.Max(0, regenInterval - regenTimer) : 0;
+    public float RegenTimeRemaining => (currentMana < MaxMana) ? Mathf.Max(0, regenInterval - regenTimer) : 0;
 
-    // Derived Stats (Cached)
     private int cachedMaxHP;
     private int cachedMaxMana;
     private int cachedMaxXP;
@@ -50,7 +50,6 @@ public class CharacterStats : MonoBehaviour
     public int MaxHP => cachedMaxHP;
     public int MaxMana => cachedMaxMana;
     public int MaxXP => cachedMaxXP;
-    
     public int MaxStamina => maxStamina;
     
     public int MeleeDamage 
@@ -82,6 +81,8 @@ public class CharacterStats : MonoBehaviour
         }
     }
 
+    public float CritChance => Mathf.Clamp01((13 - critThreshold) / 12f) * 100f;
+
     public void RefreshCachedStats()
     {
         int effectiveBrawn = brawn + (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Brawn") : 0);
@@ -91,28 +92,21 @@ public class CharacterStats : MonoBehaviour
         cachedMaxMana = effectiveGrit * 3 + 10;
         cachedMaxXP = (int)(100 * Mathf.Pow(1.5f, level - 1));
 
-        // Visual Growth - Steve gets slightly bigger as he levels up
-        float scale = 1.0f + (level - 1) * 0.1f; // Steve grows by 10% per level
+        float scale = 1.0f + (level - 1) * 0.1f; 
         transform.localScale = Vector3.one * scale;
         Debug.Log($"[CharacterStats] {name} Refreshed. Level: {level}, Scale: {scale}, MaxHP: {cachedMaxHP}");
-        }
+    }
 
     public void AddXP(float amount)
     {
         if (isDead) 
         {
-            Debug.LogWarning($"[CharacterStats] {name} is dead. Ignoring {amount} XP. If alive, check life reset.");
+            Debug.LogWarning($"[CharacterStats] {name} is dead. Ignoring XP.");
             return;
         }
         currentXP += amount;
-        Debug.Log($"[CharacterStats] {name} gained {amount} XP. Current: {currentXP}/{MaxXP}");
-        
         CombatSystem.SpawnText(transform.position + Vector3.up * 2.5f, $"+{amount} XP", Color.cyan);
-
-        while (currentXP >= MaxXP)
-        {
-            LevelUp();
-        }
+        while (currentXP >= MaxXP) LevelUp();
     }
 
     private void LevelUp()
@@ -121,47 +115,35 @@ public class CharacterStats : MonoBehaviour
         level++;
         RefreshCachedStats();
 
-        // Passive +1 to a random stat
-        string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
-        string randomStat = stats[UnityEngine.Random.Range(0, stats.Length)];
+        string[] statsArr = { "Brawn", "Finesse", "Wit", "Grit" };
+        string randomStat = statsArr[UnityEngine.Random.Range(0, statsArr.Length)];
         ApplyStatUpgrade(randomStat, 1, false); 
         
-        currentHP = MaxHP; // Heal on level up
-        currentMana = MaxMana; // Refill Energy on level up
-        Debug.Log($"[CharacterStats] LEVEL UP! Now Level {level}. Passive +1 {randomStat}. Next XP: {MaxXP}");
+        currentHP = MaxHP;
+        currentMana = MaxMana;
         
         if (CombatSystem.Instance != null)
         {
             CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 3.0f, "LEVEL UP!", Color.cyan);
             CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.2f, $"+1 {randomStat}!", Color.yellow);
         }
-
         ShowLevelUpPopup();
     }
 
     private void ShowLevelUpPopup()
     {
-        // Pick 3 random stats to upgrade
-        string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
-        System.Collections.Generic.List<string> choices = new System.Collections.Generic.List<string>(stats);
-        
-        string s1 = choices[UnityEngine.Random.Range(0, choices.Count)];
-        choices.Remove(s1);
-        string s2 = choices[UnityEngine.Random.Range(0, choices.Count)];
-        choices.Remove(s2);
-        string s3 = choices[UnityEngine.Random.Range(0, choices.Count)];
+        string[] statsArr = { "Brawn", "Finesse", "Wit", "Grit" };
+        List<string> choices = new List<string>(statsArr);
+        string s1 = choices[Random.Range(0, choices.Count)]; choices.Remove(s1);
+        string s2 = choices[Random.Range(0, choices.Count)]; choices.Remove(s2);
+        string s3 = choices[Random.Range(0, choices.Count)];
 
-        GenericPopup.Show(
-            "LEVEL UP!",
-            $"Choose a stat to upgrade for Level {level}:\n(You also gained a passive +1 in a random stat!)",
+        GenericPopup.Show("LEVEL UP!", $"Choose a stat to upgrade for Level {level}:", 
             $"+2 {s1}", $"+2 {s2}", $"+2 {s3}",
             () => ApplyStatUpgrade(s1, 2, true),
             () => ApplyStatUpgrade(s2, 2, true),
-            () => ApplyStatUpgrade(s3, 2, true)
-        );
+            () => ApplyStatUpgrade(s3, 2, true));
     }
-
-    public float CritChance => Mathf.Clamp01((13 - critThreshold) / 12f) * 100f;
 
     public void ApplyStatUpgrade(string statName, int amount, bool showFeedback)
     {
@@ -172,91 +154,57 @@ public class CharacterStats : MonoBehaviour
             case "Wit": wit += amount; break;
             case "Grit": grit += amount; break;
         }
-        
         pointsGainedThisRun += amount;
         permPointsToAssign = pointsGainedThisRun / 2;
         RefreshCachedStats();
 
-        // Refresh UI
-        var statsUI = UnityEngine.Object.FindAnyObjectByType<StatsUI>();
+        var statsUI = Object.FindAnyObjectByType<StatsUI>();
         if (statsUI != null) statsUI.Refresh();
         
-        if (showFeedback)
-        {
-            CombatSystem.Instance?.SpawnDamageText(transform.position + Vector3.up * 2f, $"+{amount} {statName}!", Color.green);
-        }
+        if (showFeedback) CombatSystem.Instance?.SpawnDamageText(transform.position + Vector3.up * 2f, $"+{amount} {statName}!", Color.green);
         
-        // Ensure values are capped/refilled properly after stat change (e.g. MaxHP might have increased)
         currentHP = MaxHP;
         currentMana = MaxMana;
     }
 
-    private void Start()
-    {
-        StartCoroutine(RegenRoutine());
-    }
+    private void Start() { StartCoroutine(RegenRoutine()); }
 
     private IEnumerator RegenRoutine()
     {
-        while (!isDead)
+        while (true)
         {
-            if (currentMana < MaxMana)
-            {
-                yield return new WaitForSeconds(regenInterval);
-                if (!isDead)
-                {
-                    RegenerateMana(manaRegenPerInterval);
-                }
-            }
-            else
-            {
-                yield return new WaitForSeconds(1.0f);
-            }
+            if (!isDead && currentMana < MaxMana) RegenerateMana(manaRegenPerInterval);
+            yield return new WaitForSeconds(regenInterval);
         }
     }
 
     public void ResetStats()
     {
         level = 1;
+        isDead = false;
+        pointsGainedThisRun = 0;
+        RefreshCachedStats();
         currentHP = MaxHP;
         currentMana = MaxMana;
         currentStamina = MaxStamina;
         currentXP = 0; 
-        isDead = false;
-        pointsGainedThisRun = 0;
     }
 
     public void ConsumeMana(int amount)
     {
         currentMana = Mathf.Max(0, currentMana - amount);
-        Debug.Log($"[CharacterStats] Consumed {amount} Energy. Current: {currentMana}/{MaxMana}");
-        
-        if (CombatSystem.Instance != null)
-        {
-            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"-{amount} Energy", new Color(0.6f, 0f, 1f));
-        }
+        CombatSystem.Instance?.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"-{amount} Energy", new Color(0.6f, 0f, 1f));
     }
 
     public void RegenerateMana(int amount)
     {
         currentMana = Mathf.Min(currentMana + amount, MaxMana);
-        Debug.Log($"[CharacterStats] Regenerated {amount} Energy. Current: {currentMana}/{MaxMana}");
-        
-        if (CombatSystem.Instance != null)
-        {
-            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"+{amount} Energy", new Color(0.7f, 0.2f, 1f));
-        }
     }
 
     public void AddGold(int amount)
     {
         coins += amount;
-        Debug.Log($"[CharacterStats] Gained {amount} Gold. Total: {coins}");
-        
-        if (CombatSystem.Instance != null)
-        {
-            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.0f, $"+{amount} Gold", new Color(1f, 0.84f, 0f));
-        }
+        CombatSystem.Instance?.SpawnDamageText(transform.position + Vector3.up * 2.0f, $"+{amount} Gold", new Color(1f, 0.84f, 0f));
     }
 
     private void Awake()
@@ -275,62 +223,75 @@ public class CharacterStats : MonoBehaviour
         finessePerm = PlayerPrefs.GetInt("Perm_Finesse", 0);
         witPerm = PlayerPrefs.GetInt("Perm_Wit", 0);
         gritPerm = PlayerPrefs.GetInt("Perm_Grit", 0);
+        brawn += brawnPerm; finesse += finessePerm; wit += witPerm; grit += gritPerm;
 
-        brawn += brawnPerm;
-        finesse += finessePerm;
-        wit += witPerm;
-        grit += gritPerm;
+        // Visual growth based on perm upgrades
+        int totalPerm = brawnPerm + finessePerm + witPerm + gritPerm;
+        if (totalPerm > 0)
+        {
+            transform.localScale += Vector3.one * (totalPerm * 0.02f);
+        }
     }
 
     public void TakeDamage(float amount)
     {
         if (isDead) return;
+
+        // Apply defense reduction
+        float reducedAmount = Mathf.Max(1, amount - Defense);
         
-        // Stamina depletes alongside HP when taking damage
-        currentStamina = Mathf.Max(0, currentStamina - amount);
-        currentHP = Mathf.Max(0, currentHP - amount);
+        currentStamina = Mathf.Max(0, currentStamina - reducedAmount);
+        currentHP = Mathf.Max(0, currentHP - reducedAmount);
         
-        if (currentHP <= 0) 
-        {
-            currentHP = 0;
-            if (CombatSystem.Instance != null && this == CombatSystem.Instance.playerStats)
-            {
-                Die();
-            }
-            else
-            {
-                isDead = true;
-            }
-        }
+        if (currentHP <= 0) { currentHP = 0; Die(); }
     }
 
     private void Die()
     {
         isDead = true;
-        Debug.Log("[CharacterStats] Steve has died!");
         
-        if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
+        Animator anim = GetComponent<Animator>();
+        if (anim != null) anim.SafeSetTrigger("Die");
+
+        var nav = GetComponent<HeroNavigation>();
+        if (nav != null) nav.StopMoving("Death");
+
+        // Only trigger the death flow if this is Steve (the player)
+        if (GetComponent<EquipmentManager>() != null)
         {
-            CombatSystem.Instance.EndCombat(false);
+            // If in combat, let CombatSystem handle the sequence/popup
+            // Otherwise, we'll need to show it here (future-proofing)
+            if (CombatSystem.Instance == null || !CombatSystem.Instance.isInCombat)
+            {
+                StartCoroutine(DelayedDeathPopup());
+            }
         }
+        else
+        {
+            // If an enemy dies, the CombatSystem handles it via EndCombat(true) 
+            // in the PlayerAttackSequence or OnReachedPOI.
+            Debug.Log($"[CharacterStats] {name} (Enemy/Object) has been defeated.");
+        }
+    }
 
-        // Pick 2 random stats for the permanent upgrade choice
-string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
-        System.Collections.Generic.List<string> choices = new System.Collections.Generic.List<string>(stats);
-        
-        string s1 = choices[UnityEngine.Random.Range(0, choices.Count)];
-        choices.Remove(s1);
-        string s2 = choices[UnityEngine.Random.Range(0, choices.Count)];
+    private IEnumerator DelayedDeathPopup()
+    {
+        yield return new WaitForSeconds(2.0f);
+        ShowDeathPopup();
+    }
 
+    public void ShowDeathPopup()
+    {
+        string[] statsArr = { "Brawn", "Finesse", "Wit", "Grit" };
+        List<string> choices = new List<string>(statsArr);
+        string s1 = choices[Random.Range(0, choices.Count)]; choices.Remove(s1);
+        string s2 = choices[Random.Range(0, choices.Count)];
         int bonus = permPointsToAssign;
 
-        GenericPopup.Show(
-            "STEVE HAS FALLEN",
-            $"You gained {pointsGainedThisRun} points this run.\nChoose a permanent enhancement for your next soul (+{bonus}):",
+        GenericPopup.Show("STEVE HAS FALLEN", $"Choose a permanent enhancement for your next soul (+{bonus}):", 
             s1, s2, null,
             () => ApplyPermUpgrade(s1, bonus),
-            () => ApplyPermUpgrade(s2, bonus)
-        );
+            () => ApplyPermUpgrade(s2, bonus));
     }
 
     private void ApplyPermUpgrade(string statName, int amount)
@@ -338,13 +299,8 @@ string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
         int current = PlayerPrefs.GetInt("Perm_" + statName, 0);
         PlayerPrefs.SetInt("Perm_" + statName, current + amount);
         PlayerPrefs.Save();
-
-        Debug.Log($"[CharacterStats] Permanent Upgrade: +{amount} {statName}. Persisting to next run.");
-
         GenericPopup.ResetForSceneLoad();
+        EquipmentLootPopup.ResetForSceneLoad();
         UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
 }
-
-
-

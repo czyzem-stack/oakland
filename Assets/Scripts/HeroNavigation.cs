@@ -18,6 +18,7 @@ public class HeroNavigation : MonoBehaviour
     private NavMeshAgent agent;
     private Animator animator;
     private List<Transform> availablePOIs = new List<Transform>();
+    private List<GameObject> activeCoins = new List<GameObject>();
     private Transform currentTarget;
     private CharacterStats stats;
     private Camera mainCam;
@@ -123,9 +124,9 @@ public class HeroNavigation : MonoBehaviour
 
     void Update()
     {
-        if (agent == null) return;
+        if (agent == null || stats.isDead) return;
 
-        if (GenericPopup.IsOpen)
+        if (GenericPopup.IsOpen || EquipmentLootPopup.IsOpen)
         {
             if (isMoving) StopMoving("Popup open");
             if (animator != null) animator.SafeSetFloat("Speed", 0f);
@@ -147,6 +148,10 @@ public class HeroNavigation : MonoBehaviour
             lastPosition = transform.position;
 
             float speed = agent.velocity.magnitude / agent.speed;
+            
+            // If we are actively moving but velocity is low (starting up), force a walk animation
+            if (isMoving && speed < 0.1f && agent.hasPath) speed = 0.5f;
+
             if (animator != null) animator.SafeSetFloat("Speed", speed);
 
             if (currentTarget != null && !agent.pathPending && agent.isOnNavMesh && agent.remainingDistance <= agent.stoppingDistance)
@@ -164,6 +169,8 @@ public class HeroNavigation : MonoBehaviour
 
     public void OnDiceRolled(int totalValue)
     {
+        if (stats.isDead) return;
+
         rollsCount++;
         if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
         {
@@ -188,9 +195,9 @@ public class HeroNavigation : MonoBehaviour
 
     private void SpawnCoinsAlongPath()
     {
-        if (coinPrefab == null || agent == null || currentTarget == null)
+        if (coinPrefab == null || agent == null || currentTarget == null || stats.isDead)
         {
-            Debug.LogWarning($"[HeroNavigation] Cannot spawn coins. Prefab: {coinPrefab != null}, Agent: {agent != null}, Target: {currentTarget != null}");
+            Debug.LogWarning($"[HeroNavigation] Cannot spawn coins. Prefab: {coinPrefab != null}, Agent: {agent != null}, Target: {currentTarget != null}, Dead: {stats.isDead}");
             return;
         }
 
@@ -262,26 +269,37 @@ public class HeroNavigation : MonoBehaviour
                         coin.transform.localScale = Vector3.one * 6f;
                         if (coin.GetComponent<Coin>() == null) coin.AddComponent<Coin>();
                         spawnedPositions.Add(spawnPos);
+                        activeCoins.Add(coin);
                         spawnedCount++;
                     }
 
                     nextCoinDist += coinInterval;
-                }
-                currentDist += segmentLen;
-                if (totalIterations > 1000) break;
-            }
-            Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {currentTarget.name}. Status: {path.status}");
-        }
-        else
-        {
-            Debug.LogError($"[HeroNavigation] agent.CalculatePath failed to {targetPos}!");
-        }
-    }
+                    }
+                    currentDist += segmentLen;
+                    if (totalIterations > 1000) break;
+                    }
+                    Debug.Log($"[HeroNavigation] Spawned {spawnedCount} coins along path to {currentTarget.name}. Status: {path.status}");
+                    }
+                    else
+                    {
+                    Debug.LogError($"[HeroNavigation] agent.CalculatePath failed to {targetPos}!");
+                    }
+                    }
 
-    private void SelectNextPOI()
-    {
-        spawnedCoinsForCurrentTarget = false;
-        if (availablePOIs.Count == 0) ResetPOIs();
+                    private void ClearActiveCoins()
+                    {
+                    foreach (var coin in activeCoins)
+                    {
+                    if (coin != null) Destroy(coin);
+                    }
+                    activeCoins.Clear();
+                    }
+
+                    private void SelectNextPOI()
+                    {
+                    ClearActiveCoins();
+                    spawnedCoinsForCurrentTarget = false;
+                    if (availablePOIs.Count == 0) ResetPOIs();
 
         if (availablePOIs.Count > 0)
         {
@@ -314,6 +332,14 @@ public class HeroNavigation : MonoBehaviour
             return;
         }
 
+        // Reset any combat/victory triggers so Steve transitions back to movement
+        if (animator != null)
+        {
+            animator.ResetTrigger("Victory");
+            animator.ResetTrigger("Attack");
+            animator.ResetTrigger("GetHit");
+        }
+
         agent.isStopped = false;
         agent.SetDestination(currentTarget.position);
         isMoving = true;
@@ -336,7 +362,7 @@ public class HeroNavigation : MonoBehaviour
 
     public void ResumeAfterCombat()
     {
-        if (stats != null) stats.isDead = false; // Always clear death state when resuming
+        if (stats.isDead) return;
         EnsureComponents();
         TryWarpToNavMesh();
         if (remainingMeters > 0.1f) StartMoving();
@@ -350,14 +376,29 @@ public class HeroNavigation : MonoBehaviour
         {
             if (remainingMeters > 0.1f)
             {
+                bool isChestTarget = enemyStats.name.Contains("Chest");
                 int impactDamage = Mathf.CeilToInt(remainingMeters * (stats.currentHP / 10f));
-                enemyStats.TakeDamage(impactDamage);
-                if (CombatSystem.Instance != null)
+                
+                // Chests (Mimics) are immune to impact damage to force a real combat encounter
+                if (!isChestTarget)
                 {
-                    CombatSystem.Instance.SpawnDamageText(enemyStats.transform.position + Vector3.up * 2f, $"IMPACT! -{impactDamage}", Color.yellow);
-                    (mainCam ?? (mainCam = Camera.main))?.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f);
+                    enemyStats.TakeDamage(impactDamage);
+                    if (CombatSystem.Instance != null)
+                    {
+                        CombatSystem.Instance.SpawnDamageText(enemyStats.transform.position + Vector3.up * 2f, $"IMPACT! -{impactDamage}", Color.yellow);
+                        (mainCam ?? (mainCam = Camera.main))?.GetComponent<CameraFollow>()?.Shake(0.3f, 0.4f);
+                    }
+                    if (animator != null) animator.SafeSetTrigger("Attack");
                 }
-                if (animator != null) animator.SafeSetTrigger("Attack");
+                else
+                {
+                    // For chests, we still show some juice but no damage
+                    if (CombatSystem.Instance != null)
+                    {
+                        (mainCam ?? (mainCam = Camera.main))?.GetComponent<CameraFollow>()?.Shake(0.2f, 0.3f);
+                    }
+                }
+                
                 remainingMeters = 0;
 
                 if (enemyStats.isDead)
