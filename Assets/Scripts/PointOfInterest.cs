@@ -45,6 +45,7 @@ public class PointOfInterest : MonoBehaviour
 
         CharacterStats stats = GetComponentInChildren<CharacterStats>();
         if (stats == null || stats.isDead) return;
+if (stats == null || stats.isDead) return;
 
         CharacterStats player = CombatSystem.Instance.playerStats;
         if (player == null) return;

@@ -270,13 +270,13 @@ public class CharacterStats : MonoBehaviour
         isDead = true;
         Debug.Log("[CharacterStats] Steve has died!");
         
-        if (CombatSystem.Instance != null)
+        if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
         {
-            CombatSystem.Instance.isInCombat = false;
+            CombatSystem.Instance.EndCombat(false);
         }
 
         // Pick 2 random stats for the permanent upgrade choice
-        string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
+string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
         System.Collections.Generic.List<string> choices = new System.Collections.Generic.List<string>(stats);
         
         string s1 = choices[UnityEngine.Random.Range(0, choices.Count)];

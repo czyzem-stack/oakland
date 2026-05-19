@@ -299,7 +299,11 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
     {
         Debug.Log($"[HeroNavigation] Stopping: {reason}");
         isMoving = false;
-        if (agent != null && agent.isOnNavMesh) agent.isStopped = true;
+        if (agent != null && agent.isOnNavMesh) 
+        {
+            agent.isStopped = true;
+            agent.velocity = Vector3.zero; // Prevent gliding through targets
+        }
         remainingMeters = Mathf.Max(0, remainingMeters);
     }
 

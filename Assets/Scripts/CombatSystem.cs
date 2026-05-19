@@ -88,13 +88,16 @@ public class CombatSystem : MonoBehaviour
         if (pAnim != null) pAnim.SafeSetFloat("Speed", 1.5f);
         if (eAnim != null && !isStatic && !isDragon && !isWorm) eAnim.SafeSetFloat("Speed", 1.5f);
 
-        float duration = 0.8f; // Increased for "butteryness"
+        float duration = 0.8f; 
         float elapsed = 0;
         Vector3 pStart = playerStats.transform.position;
         Vector3 eStart = enemy.transform.position;
 
+        // If we are already close (e.g. hitting a chest/POI directly), don't force a 'jump'
+        if (Vector3.Distance(pStart, playerTarget) < 0.5f) duration = 0.2f;
+
         while (elapsed < duration)
-        {
+{
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
             // Smooth step curve
@@ -344,10 +347,10 @@ t.fontSize = 60;
         SpawnText(position, text, color);
     }
 
-    private void EndCombat(bool playerWon)
+    public void EndCombat(bool playerWon)
     {
         if (!isInCombat) return;
-        isInCombat = false;
+isInCombat = false;
         isPlayerTurn = false;
         isAttackSequenceRunning = false;
         
