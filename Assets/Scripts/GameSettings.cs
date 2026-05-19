@@ -14,9 +14,11 @@ public class GameSettings : MonoBehaviour
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            Application.targetFrameRate = 60;
+            QualitySettings.vSyncCount = 0; 
         }
         else
-        {
+{
             Destroy(gameObject);
         }
     }

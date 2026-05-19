@@ -7,22 +7,34 @@ public class ManaBar : MonoBehaviour
     public Image fillImage;
     public Text countdownText;
 
+    private float lastFill = -1f;
+    private float lastCountdown = -1f;
+
     public void Update()
     {
         if (stats == null || fillImage == null) return;
 
         float fill = stats.MaxMana > 0 ? stats.currentMana / (float)stats.MaxMana : 0;
-        fillImage.transform.localScale = new Vector3(fill, 1, 1);
+        if (Mathf.Abs(fill - lastFill) > 0.01f)
+        {
+            lastFill = fill;
+            fillImage.transform.localScale = new Vector3(fill, 1, 1);
+        }
 
         if (countdownText != null)
         {
-            if (stats.currentMana < stats.MaxMana)
+            float currentRegen = stats.RegenTimeRemaining;
+            if (Mathf.Abs(currentRegen - lastCountdown) > 0.5f)
             {
-                countdownText.text = $"{stats.RegenTimeRemaining:F0}s";
-            }
-            else
-            {
-                countdownText.text = "";
+                lastCountdown = currentRegen;
+                if (stats.currentMana < stats.MaxMana)
+                {
+                    countdownText.text = $"{currentRegen:F0}s";
+                }
+                else
+                {
+                    countdownText.text = "";
+                }
             }
         }
     }

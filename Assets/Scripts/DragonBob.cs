@@ -14,8 +14,6 @@ public class DragonBob : MonoBehaviour
 public float arrivalDistance = 3.0f;
 
     [Header("Behavior")]
-    public int minRestTurns = 1; 
-    public int maxRestTurns = 3;
     public float combatEngagementChance = 0.10f; 
     public float flyOverPlayerChance = 0.8f; 
     public int gracePeriodRolls = 4;
@@ -24,9 +22,8 @@ public float arrivalDistance = 3.0f;
     private int rollsSinceStart = 0;
     private List<Transform> poiList = new List<Transform>();
     private Transform targetPOI;
-    private int restTurnsRemaining = 0;
     private BobState currentState = BobState.Flying;
-    private bool hasRoaredOverPlayer = false;
+private bool hasRoaredOverPlayer = false;
 
     private Animator animator;
     private CharacterStats stats;

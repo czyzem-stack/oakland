@@ -89,7 +89,7 @@ List<GameObject> tempObjects = new List<GameObject>();
         yield return new WaitForSeconds(0.5f);
 
         Debug.Log("[DiceRollSystem] Warmup and Settle Complete.");
-    }
+        }
 
     private void CleanupHierarchy()
     {
@@ -274,11 +274,19 @@ List<GameObject> tempObjects = new List<GameObject>();
             bool isDoubles = rollValues.Count == 2 && rollValues[0] == rollValues[1];
             if (isDoubles) total *= 2;
 
+            CharacterStats pStats = GetComponentInParent<CharacterStats>();
+            if (pStats == null) pStats = GetComponentInChildren<CharacterStats>();
+
             if (resultText != null) 
             {
                 resultText.gameObject.SetActive(true);
                 resultText.text = isDoubles ? $"DOUBLE! {total}" : total.ToString();
                 StartCoroutine(AnimateFloatingText(resultText));
+            }
+
+            if (pStats != null) 
+            {
+                pStats.AddXP(total); // Gaining XP on every roll (Floating text handled by CharacterStats)
             }
 
             OnAnyDiceRolled?.Invoke(total);

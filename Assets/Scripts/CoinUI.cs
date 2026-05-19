@@ -24,6 +24,8 @@ public class CoinUI : MonoBehaviour
         }
     }
 
+    private int lastCoins = -1;
+
     void Update()
     {
         if (playerStats == null)
@@ -32,9 +34,10 @@ public class CoinUI : MonoBehaviour
             return;
         }
 
-        if (coinText != null)
+        if (coinText != null && playerStats.coins != lastCoins)
         {
-            coinText.text = $"Gold: {playerStats.coins}";
+            lastCoins = playerStats.coins;
+            coinText.text = $"Gold: {lastCoins}";
         }
     }
 }

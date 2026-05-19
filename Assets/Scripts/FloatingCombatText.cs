@@ -1,18 +1,21 @@
 using UnityEngine;
-using UnityEngine.UI;
+using TMPro;
 using System.Collections;
 
 public class FloatingCombatText : MonoBehaviour
 {
-    public Text text;
+    public TextMeshProUGUI text;
     public float duration = 1.5f;
     public Vector3 driftDirection = Vector3.up;
     public float driftSpeed = 1f;
 
     public void Setup(string content, Color color)
     {
-        text.text = content;
-        text.color = color;
+        if (text != null)
+        {
+            text.text = content;
+            text.color = color;
+        }
         StartCoroutine(FadeRoutine());
     }
 

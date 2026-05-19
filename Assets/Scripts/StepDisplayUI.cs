@@ -11,6 +11,8 @@ public class StepDisplayUI : MonoBehaviour
         playerNav = Object.FindAnyObjectByType<HeroNavigation>();
     }
 
+    private string lastText = "";
+
     void Update()
     {
         if (playerNav != null && stepText != null)
@@ -18,7 +20,12 @@ public class StepDisplayUI : MonoBehaviour
             string targetText = $"Target: {playerNav.TargetName} ({playerNav.DistanceToTarget:F1}m)";
             string movesText = playerNav.remainingMeters > 0.01f ? $" | Moves: {playerNav.remainingMeters:F1}m" : "";
             
-            stepText.text = targetText + movesText;
+            string currentText = targetText + movesText;
+            if (currentText != lastText)
+            {
+                lastText = currentText;
+                stepText.text = currentText;
+            }
         }
     }
 }

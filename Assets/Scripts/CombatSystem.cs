@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -14,12 +15,14 @@ public class CombatSystem : MonoBehaviour
 
     [Header("Juice Prefabs")]
     public GameObject hitEffectPrefab;
-    private Font damageFont;
+    private TMP_FontAsset damageFont;
 
     private void Awake()
     {
         Instance = this;
-        damageFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        // Try to find a default TMP font
+        damageFont = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
+        
         if (hitEffectPrefab == null)
         {
             hitEffectPrefab = UnityEngine.Resources.Load<GameObject>("FX_Blood_Splatter_01");
@@ -227,6 +230,13 @@ public class CombatSystem : MonoBehaviour
 
         if (currentEnemyStats != null && currentEnemyStats.currentHP <= 0)
         {
+            // XP on kill: roll value * amount per kill
+            if (playerStats != null)
+            {
+                float xpGain = rollValue * playerStats.amountPerKill;
+                playerStats.AddXP(xpGain);
+            }
+
             if (enemyAnim != null)
             {
                 bool isDragon = currentEnemyStats.name.Contains("DragonBob");
@@ -292,9 +302,9 @@ public class CombatSystem : MonoBehaviour
         if (isDragon && enemyAnim != null) enemyAnim.CrossFade("Fly Float", 0.5f);
     }
 
-    public void SpawnDamageText(Vector3 position, string text, Color color)
+    public static void SpawnText(Vector3 position, string text, Color color)
     {
-        GameObject canvasGo = new GameObject("DamageTextCanvas");
+        GameObject canvasGo = new GameObject("FloatingTextCanvas");
         canvasGo.transform.position = position + Vector3.up * 0.5f;
         Canvas canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
@@ -305,22 +315,27 @@ public class CombatSystem : MonoBehaviour
         rect.sizeDelta = new Vector2(300, 100); 
         rect.localScale = Vector3.one * 0.0075f; 
 
-        GameObject textGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
+        GameObject textGo = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
         textGo.transform.SetParent(canvasGo.transform, false);
-        Text t = textGo.GetComponent<Text>();
-        t.font = damageFont != null ? damageFont : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        t.fontSize = 60; 
-        t.fontStyle = FontStyle.Bold;
-        t.alignment = TextAnchor.MiddleCenter;
-        t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
+        TextMeshProUGUI t = textGo.GetComponent<TextMeshProUGUI>();
         
-        textGo.AddComponent<Outline>().effectColor = Color.black;
+        t.font = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
+        t.fontSize = 60; 
+        t.alignment = TextAlignmentOptions.Center;
+        t.textWrappingMode = TextWrappingModes.NoWrap;
+        
+        t.outlineWidth = 0.2f;
+        t.outlineColor = Color.black;
 
         FloatingCombatText fct = canvasGo.AddComponent<FloatingCombatText>();
         fct.text = t;
         fct.driftSpeed = 2.0f; 
         fct.Setup(text, color);
+    }
+
+    public void SpawnDamageText(Vector3 position, string text, Color color)
+    {
+        SpawnText(position, text, color);
     }
 
     private void EndCombat(bool playerWon)

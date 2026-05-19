@@ -14,7 +14,9 @@ public class CharacterStats : MonoBehaviour
 
     [Header("Current State")]
     public float currentHP;
-    public float currentMana;
+    public float currentMana; // Mana becomes Energy
+    public float currentStamina;
+    public float currentXP;
     public int coins;
     public bool isDead = false;
 
@@ -23,14 +25,48 @@ public class CharacterStats : MonoBehaviour
     public float regenInterval = 15.0f;
     private float regenTimer = 0f;
 
+    public int maxXP = 100;
+    public int maxStamina = 100;
+    public int level = 1;
+    public float amountPerKill = 5f; // New: amount per kill multiplier
+
     public float RegenTimeRemaining => (currentMana < MaxMana) ? Mathf.Max(0, regenInterval - regenTimer) : 0;
 
     // Derived Stats
     public int MaxHP => brawn * 5 + 10;
-    public int MaxMana => grit * 3 + 10; 
+    public int MaxMana => grit * 3 + 10; // Max Energy
+    public int MaxStamina => maxStamina;
+    public int MaxXP => (int)(100 * Mathf.Pow(1.5f, level - 1)); // Exponential curve
     public int MeleeDamage => brawn;
     public int RangedDamage => finesse;
     public int Defense => finesse / 2;
+
+    public void AddXP(float amount)
+    {
+        if (isDead) return;
+        currentXP += amount;
+        Debug.Log($"[CharacterStats] Gained {amount} XP. Current: {currentXP}/{MaxXP}");
+        
+        CombatSystem.SpawnText(transform.position + Vector3.up * 2.5f, $"+{amount} XP", Color.cyan);
+
+        while (currentXP >= MaxXP)
+        {
+            LevelUp();
+        }
+    }
+
+    private void LevelUp()
+    {
+        currentXP -= MaxXP;
+        level++;
+        currentHP = MaxHP; // Heal on level up
+        Debug.Log($"[CharacterStats] LEVEL UP! Now Level {level}. Next XP: {MaxXP}");
+        
+        if (CombatSystem.Instance != null)
+        {
+            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 3.0f, "LEVEL UP!", Color.cyan);
+        }
+    }
 
     private void Awake()
     {
@@ -63,8 +99,11 @@ public class CharacterStats : MonoBehaviour
 
     public void ResetStats()
     {
+        level = 1;
         currentHP = MaxHP;
         currentMana = MaxMana;
+        currentStamina = MaxStamina;
+        currentXP = 0; 
         isDead = false;
     }
 
@@ -104,7 +143,11 @@ public class CharacterStats : MonoBehaviour
     public void TakeDamage(float amount)
     {
         if (isDead) return;
+        
+        // Stamina depletes alongside HP when taking damage
+        currentStamina = Mathf.Max(0, currentStamina - amount);
         currentHP = Mathf.Max(0, currentHP - amount);
+        
         if (currentHP <= 0) isDead = true;
     }
 }

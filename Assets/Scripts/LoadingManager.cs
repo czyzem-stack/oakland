@@ -48,8 +48,8 @@ public class LoadingManager : MonoBehaviour
             
             float p = (float)i / warmupPrefabs.Length * 0.15f; 
             if (progressBar != null) progressBar.value = p;
-            if (progressText != null) progressText.text = $"Initialising... {(p * 100):F0}%";
-        }
+            if (progressText != null) progressText.text = $"Loading... {(p * 100):F0}%";
+}
         DiceRollSystem.WarmedUp = true;
     }
 
@@ -67,7 +67,7 @@ public class LoadingManager : MonoBehaviour
             visualProgress = Mathf.MoveTowards(visualProgress, targetProgress, Time.deltaTime * 0.4f);
             
             if (progressBar != null) progressBar.value = visualProgress;
-            if (progressText != null) progressText.text = $"{(visualProgress * 100):F0}%";
+            if (progressText != null) progressText.text = $"Loading... {(visualProgress * 100):F0}%";
 
             if (op.progress >= 0.9f && Time.time - startTime >= minLoadingTime)
             {
@@ -87,13 +87,21 @@ public class LoadingManager : MonoBehaviour
             
             while (true)
             {
+                bool pressed = false;
                 if (UnityEngine.InputSystem.Pointer.current != null && UnityEngine.InputSystem.Pointer.current.press.wasPressedThisFrame)
                 {
-                    break;
+                    pressed = true;
                 }
+                // Fallback for keyboard/any key
+                else if (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.anyKey.wasPressedThisFrame)
+                {
+                    pressed = true;
+                }
+                
+                if (pressed) break;
                 yield return null;
             }
-        }
+}
 
         op.allowSceneActivation = true;
     }
