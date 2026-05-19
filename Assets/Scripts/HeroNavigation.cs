@@ -43,7 +43,7 @@ public class HeroNavigation : MonoBehaviour
             // Adjust position to ground level (subtracting the coin's float offset)
             // and sink it slightly into the ground for a better "buried" look.
             Vector3 spawnPos = position;
-            if (UnityEngine.AI.NavMesh.SamplePosition(position, out UnityEngine.AI.NavMeshHit hit, 3.0f, UnityEngine.AI.NavMesh.AllAreas))
+            if (UnityEngine.AI.NavMesh.SamplePosition(position, out UnityEngine.AI.NavMeshHit hit, 3.0f, 1 << 0))
             {
                 spawnPos = hit.position;
             }
@@ -182,7 +182,7 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
         Vector3 startPos = transform.position;
         if (!agent.isOnNavMesh)
         {
-            if (NavMesh.SamplePosition(transform.position, out NavMeshHit startHit, 5.0f, NavMesh.AllAreas))
+            if (NavMesh.SamplePosition(transform.position, out NavMeshHit startHit, 5.0f, 1 << 0))
                 startPos = startHit.position;
         }
 
@@ -190,7 +190,8 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
         if (NavMesh.SamplePosition(targetPos, out NavMeshHit endHit, 5.0f, NavMesh.AllAreas))
             targetPos = endHit.position;
 
-        if (NavMesh.CalculatePath(startPos, targetPos, NavMesh.AllAreas, path))
+        // Use agent.CalculatePath to ensure NavMeshLink traversal is considered
+        if (agent.CalculatePath(targetPos, path))
         {
             float currentDist = 0;
             float coinInterval = 5.0f; // Every other step (2.5m * 2)
@@ -213,7 +214,7 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
                     float t = (nextCoinDist - currentDist) / segmentLen;
                     Vector3 spawnPos = Vector3.Lerp(start, end, Mathf.Clamp01(t));
                     
-                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, NavMesh.AllAreas)) 
+                    if (NavMesh.SamplePosition(spawnPos, out NavMeshHit hit, 3f, 1 << 0)) 
                         spawnPos = hit.position + Vector3.up * 0.7f;
                     else
                         spawnPos.y += 0.7f;
@@ -286,12 +287,29 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
 
     private void StartMoving()
     {
-        if (currentTarget != null && agent != null)
+        if (currentTarget != null && agent != null && agent.isActiveAndEnabled)
         {
-            agent.isStopped = false;
-            agent.SetDestination(currentTarget.position);
-            isMoving = true;
-            lastPosition = transform.position;
+            // Safety warp if we managed to fall off the mesh (common after combat/animations)
+            if (!agent.isOnNavMesh)
+            {
+                if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5.0f, 1 << 0))
+                {
+                    agent.Warp(hit.position);
+                }
+            }
+
+            if (agent.isOnNavMesh)
+            {
+                agent.isStopped = false;
+                agent.SetDestination(currentTarget.position);
+                isMoving = true;
+                lastPosition = transform.position;
+            }
+            else
+            {
+                Debug.LogWarning($"[HeroNavigation] {gameObject.name} failed to find NavMesh to start moving.");
+                isMoving = false;
+            }
         }
     }
 
