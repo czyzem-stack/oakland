@@ -10,7 +10,7 @@ public class OrcPatrol : MonoBehaviour
     private NavMeshAgent agent;
     private Animator animator;
     private CharacterStats characterStats;
-    private Vector3 startPosition;
+    private PointOfInterest parentPOI;
     private bool isPatrolling = true;
 
     private DragonBob bob;
@@ -22,6 +22,7 @@ public class OrcPatrol : MonoBehaviour
         agent = GetComponent<NavMeshAgent>();
         characterStats = GetComponent<CharacterStats>();
         bob = Object.FindAnyObjectByType<DragonBob>();
+        parentPOI = GetComponentInParent<PointOfInterest>();
 
         if (agent == null)
         {
@@ -35,7 +36,6 @@ public class OrcPatrol : MonoBehaviour
         agent.angularSpeed = 180f;
 
         animator = GetComponent<Animator>();
-        startPosition = transform.position;
         
         StartCoroutine(PatrolRoutine());
     }
@@ -59,6 +59,26 @@ public class OrcPatrol : MonoBehaviour
                 if (agent.enabled && agent.isOnNavMesh) agent.isStopped = true;
             }
             return; 
+        }
+
+        // Check for Player (Steve) engagement
+        if (!isFleeing && !isPatrolling && CombatSystem.Instance != null && !CombatSystem.Instance.isInCombat)
+        {
+             // If we were paused but not in combat, resume patrolling
+             isPatrolling = true;
+        }
+
+        if (isPatrolling && !isFleeing && CombatSystem.Instance != null && !CombatSystem.Instance.isInCombat)
+        {
+            float engageDist = (parentPOI != null) ? parentPOI.engagementRadius : 6.0f;
+            float distToPlayer = Vector3.Distance(transform.position, CombatSystem.Instance.playerStats.transform.position);
+            
+            if (distToPlayer < engageDist)
+            {
+                Debug.Log($"[OrcPatrol] {name} engaging player at distance {distToPlayer}");
+                CombatSystem.Instance.StartCombat(characterStats);
+                return;
+            }
         }
         
         // Check for Bob
@@ -115,11 +135,14 @@ public class OrcPatrol : MonoBehaviour
         {
             if (isPatrolling && !isFleeing)
             {
-                // Choose random point within radius
-                Vector2 randomPoint = Random.insideUnitCircle * patrolRadius;
-                Vector3 targetPos = startPosition + new Vector3(randomPoint.x, 0, randomPoint.y);
+                float radius = (parentPOI != null) ? parentPOI.patrolRadius : 4.0f;
+                Vector3 center = (parentPOI != null) ? parentPOI.transform.position : transform.position;
 
-                if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, patrolRadius, NavMesh.AllAreas))
+                // Choose random point within radius
+                Vector2 randomPoint = Random.insideUnitCircle * radius;
+                Vector3 targetPos = center + new Vector3(randomPoint.x, 0, randomPoint.y);
+
+                if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, radius, NavMesh.AllAreas))
                 {
                     agent.SetDestination(hit.position);
                 }
@@ -143,4 +166,15 @@ public class OrcPatrol : MonoBehaviour
             yield return new WaitForSeconds(0.1f);
         }
     }
-}
+
+    private void OnDrawGizmosSelected()
+    {
+        if (parentPOI != null)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(parentPOI.transform.position, parentPOI.patrolRadius);
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(transform.position, parentPOI.engagementRadius);
+        }
+    }
+    }

@@ -35,10 +35,12 @@ public class DiceRollSystem : MonoBehaviour
     public Text resultText;
     public Animator steveAnimator;
     public HeroNavigation heroNav;
+    private Transform weaponPoint;
 
     private List<GameObject> activeDice = new List<GameObject>();
     private List<Rigidbody> activeDiceRBs = new List<Rigidbody>();
     public bool isRolling = false;
+    public bool autoRoll = false;
     private GameObject worldDiceContainer;
 
     public static bool WarmedUp = false;
@@ -53,11 +55,19 @@ public class DiceRollSystem : MonoBehaviour
         }
     }
 
+    private void Update()
+    {
+        if (autoRoll && CanRoll)
+        {
+            Roll();
+        }
+    }
+
     private IEnumerator WarmupRoutine()
     {
         WarmedUp = true;
         Debug.Log("[DiceRollSystem] Starting Warmup...");
-List<GameObject> tempObjects = new List<GameObject>();
+    List<GameObject> tempObjects = new List<GameObject>();
 
         // Spawn all prefabs to force mesh/material/shader loading
         for (int i = 0; i < dicePrefabs.Count; i++)
@@ -121,6 +131,19 @@ List<GameObject> tempObjects = new List<GameObject>();
             heroNav = GetComponentInParent<HeroNavigation>();
             if (heroNav == null) heroNav = GetComponentInChildren<HeroNavigation>();
         }
+
+        if (weaponPoint == null && steveAnimator != null)
+        {
+            Transform[] allChildren = steveAnimator.GetComponentsInChildren<Transform>();
+            foreach (var t in allChildren)
+            {
+                if (t.name.ToLower().Contains("weapon_r"))
+                {
+                    weaponPoint = t;
+                    break;
+                }
+            }
+        }
     }
 
     public bool CanRoll
@@ -131,7 +154,12 @@ List<GameObject> tempObjects = new List<GameObject>();
             
             CharacterStats stats = GetComponentInParent<CharacterStats>();
             if (stats == null) stats = GetComponentInChildren<CharacterStats>();
-            return stats != null && stats.currentMana >= 1;
+            if (stats == null) return false;
+
+            // In combat, we can always roll (safety net for soft-locks)
+            if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return true;
+
+            return stats.currentMana >= 1;
         }
     }
 
@@ -146,18 +174,25 @@ List<GameObject> tempObjects = new List<GameObject>();
             Debug.Log("[DiceRollSystem] Roll ignored - cannot roll right now.");
             return;
         }
+
+        bool inCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat;
         
         if (steveAnimator != null)
         {
-            steveAnimator.SetTrigger("Roll");
+            // If in combat, skip the 'Roll' prep and go right to 'Attack'
+            if (inCombat) steveAnimator.SetTrigger("Attack");
+            else steveAnimator.SetTrigger("Roll");
         }
 
-        // Consume 1 Energy per roll
-        CharacterStats stats = GetComponentInParent<CharacterStats>();
-        if (stats == null) stats = GetComponentInChildren<CharacterStats>();
-        if (stats != null) stats.ConsumeMana(1);
+        // Consume 1 Energy per roll only if NOT in combat
+        if (!inCombat)
+        {
+            CharacterStats stats = GetComponentInParent<CharacterStats>();
+            if (stats == null) stats = GetComponentInChildren<CharacterStats>();
+            if (stats != null) stats.ConsumeMana(1);
+        }
 
-        StartCoroutine(RollRoutine());
+        StartCoroutine(RollRoutine(inCombat));
     }
 
     private bool IsSteveBusy()
@@ -168,21 +203,23 @@ List<GameObject> tempObjects = new List<GameObject>();
         {
             // If we are in combat, we are only "busy" if it's the enemy's turn 
             // or if a player attack animation is already playing.
+            // But we allow the Roll if it's player turn and no sequence is running.
             return !CombatSystem.Instance.isPlayerTurn || CombatSystem.Instance.IsAttackSequenceRunning;
         }
 
         return false;
     }
 
-    private IEnumerator RollRoutine()
+    private IEnumerator RollRoutine(bool isCombatRoll)
     {
-        Debug.Log("[DiceRollSystem] RollRoutine started.");
+        Debug.Log($"[DiceRollSystem] RollRoutine started. CombatRoll: {isCombatRoll}");
         isRolling = true;
 
         try
         {
-            // Give the animation a moment to reach the 'release' point
-            yield return new WaitForSeconds(0.45f);
+            // Reactive feel: dice spawn much sooner during an attack swing
+            float waitTime = isCombatRoll ? 0.1f : 0.45f;
+            yield return new WaitForSeconds(waitTime);
 
             if (resultText != null) 
             {
@@ -208,9 +245,18 @@ List<GameObject> tempObjects = new List<GameObject>();
                 if (worldDiceContainer == null) worldDiceContainer = new GameObject("WorldDiceContainer");
             }
 
+            Vector3 baseSpawnPos = transform.position + spawnOffset;
+            if (isCombatRoll && weaponPoint != null) 
+            {
+                baseSpawnPos = weaponPoint.position;
+            }
+
+            int total = 0;
+            List<int> rollValues = new List<int>();
+
             for (int i = 0; i < amount; i++)
             {
-                Vector3 spawnPos = transform.position + spawnOffset + Random.insideUnitSphere * 0.1f;
+                Vector3 spawnPos = baseSpawnPos + Random.insideUnitSphere * 0.1f;
                 GameObject die = Instantiate(prefab, spawnPos, Random.rotation, worldDiceContainer.transform); 
                 die.transform.localScale = Vector3.one * scale;
                 activeDice.Add(die);
@@ -229,11 +275,42 @@ List<GameObject> tempObjects = new List<GameObject>();
                 rb.linearDamping = 1.0f;
                 rb.angularDamping = 1.0f;
 
-                rb.AddForce((Vector3.up + Random.insideUnitSphere * 0.1f) * popForce, ForceMode.Impulse);
-                rb.AddTorque(Random.insideUnitSphere * torqueForce, ForceMode.Impulse);
+                // Playful/Reactive: Dice "burst" out with more energy in combat
+                float finalPopForce = isCombatRoll ? popForce * 2.0f : popForce;
+                Vector3 forceDir = isCombatRoll ? (transform.forward + Vector3.up).normalized : Vector3.up;
+                
+                rb.AddForce((forceDir + Random.insideUnitSphere * 0.4f) * finalPopForce, ForceMode.Impulse);
+                rb.AddTorque(Random.insideUnitSphere * torqueForce * 3.0f, ForceMode.Impulse);
+
+                // Pre-calculate result for "Instant Resolve" in combat
+                DiceStats dStats = die.GetComponent<DiceStats>() ?? die.GetComponentInChildren<DiceStats>();
+                if (dStats != null)
+                {
+                    int val = Random.Range(1, GetMaxSides(diceType) + 1);
+                    // For D2 simulation using D6
+                    if (diceType == DiceType.D2) val = Random.Range(1, 3); 
+                    
+                    rollValues.Add(val);
+                    total += val;
+                }
             }
 
-            // 3. Wait for dice to settle
+            // Doubles logic
+            bool isDoubles = rollValues.Count == 2 && rollValues[0] == rollValues[1];
+            if (isDoubles) total *= 2;
+
+            // INSTANT RESOLVE IN COMBAT:
+            // We don't wait for physics. We just trigger the result and let the dice be visual juice.
+            if (isCombatRoll)
+            {
+                ApplyResult(total, isDoubles);
+                // In combat, we finish the routine immediately so the next turn can start
+                isRolling = false; 
+                StartCoroutine(FadeAndDestroyDice(new List<GameObject>(activeDice)));
+                yield break; 
+            }
+
+            // 3. Wait for dice to settle (Normal Mode only)
             yield return new WaitForSeconds(0.5f);
             
             float timer = 0;
@@ -253,9 +330,9 @@ List<GameObject> tempObjects = new List<GameObject>();
                 yield return null;
             }
 
-            // 4. Result calculation
-            int total = 0;
-            List<int> rollValues = new List<int>();
+            // 4. Result calculation (Normal Mode only)
+            total = 0;
+            rollValues.Clear();
             foreach (var die in activeDice)
             {
                 if (die != null)
@@ -271,33 +348,52 @@ List<GameObject> tempObjects = new List<GameObject>();
                 }
             }
 
-            bool isDoubles = rollValues.Count == 2 && rollValues[0] == rollValues[1];
+            isDoubles = rollValues.Count == 2 && rollValues[0] == rollValues[1];
             if (isDoubles) total *= 2;
 
-            CharacterStats pStats = GetComponentInParent<CharacterStats>();
-            if (pStats == null) pStats = GetComponentInChildren<CharacterStats>();
-
-            if (resultText != null) 
-            {
-                resultText.gameObject.SetActive(true);
-                resultText.text = isDoubles ? $"DOUBLE! {total}" : total.ToString();
-                StartCoroutine(AnimateFloatingText(resultText));
-            }
-
-            if (pStats != null) 
-            {
-                pStats.AddXP(total); // Gaining XP on every roll (Floating text handled by CharacterStats)
-            }
-
-            OnAnyDiceRolled?.Invoke(total);
-            if (heroNav != null) heroNav.OnDiceRolled(total);
-
+            ApplyResult(total, isDoubles);
             StartCoroutine(FadeAndDestroyDice(new List<GameObject>(activeDice)));
         }
         finally
         {
-            isRolling = false;
+            if (!isCombatRoll) isRolling = false;
             Debug.Log("[DiceRollSystem] RollRoutine finished.");
+        }
+    }
+
+    private void ApplyResult(int total, bool isDoubles)
+    {
+        CharacterStats pStats = GetComponentInParent<CharacterStats>();
+        if (pStats == null) pStats = GetComponentInChildren<CharacterStats>();
+
+        if (resultText != null) 
+        {
+            resultText.gameObject.SetActive(true);
+            resultText.text = isDoubles ? $"DOUBLE! {total}" : total.ToString();
+            StartCoroutine(AnimateFloatingText(resultText));
+        }
+
+        if (pStats != null) 
+        {
+            pStats.AddXP(total); 
+        }
+
+        OnAnyDiceRolled?.Invoke(total);
+        if (heroNav != null) heroNav.OnDiceRolled(total);
+    }
+
+    private int GetMaxSides(DiceType type)
+    {
+        switch (type)
+        {
+            case DiceType.D2: return 2;
+            case DiceType.D4: return 4;
+            case DiceType.D6: return 6;
+            case DiceType.D8: return 8;
+            case DiceType.D10: return 10;
+            case DiceType.D12: return 12;
+            case DiceType.D20: return 20;
+            default: return 6;
         }
     }
 

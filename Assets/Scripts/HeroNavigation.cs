@@ -39,9 +39,19 @@ public class HeroNavigation : MonoBehaviour
         if (Random.value < 0.1f)
         {
             Debug.Log("[HeroNavigation] WORM AMBUSH!");
-            GameObject worm = Instantiate(wormPrefab, position, Quaternion.identity);
+            
+            // Adjust position to ground level (subtracting the coin's float offset)
+            // and sink it slightly into the ground for a better "buried" look.
+            Vector3 spawnPos = position;
+            if (UnityEngine.AI.NavMesh.SamplePosition(position, out UnityEngine.AI.NavMeshHit hit, 3.0f, UnityEngine.AI.NavMesh.AllAreas))
+            {
+                spawnPos = hit.position;
+            }
+            spawnPos.y -= 0.25f; // Sink him slightly
+
+            GameObject worm = Instantiate(wormPrefab, spawnPos, Quaternion.identity);
             worm.name = "WormMonster_" + System.Guid.NewGuid().ToString().Substring(0, 5);
-            CharacterStats wormStats = worm.GetComponent<CharacterStats>();
+CharacterStats wormStats = worm.GetComponent<CharacterStats>();
             if (wormStats == null) wormStats = worm.AddComponent<CharacterStats>();
             wormStats.brawn = 15; wormStats.grit = 10; wormStats.ResetStats();
 

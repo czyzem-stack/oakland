@@ -95,32 +95,76 @@ private bool hasRoaredOverPlayer = false;
     void Update()
     {
         if (stats != null && stats.isDead) return;
-        bool inCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat && CombatSystem.Instance.currentEnemyStats == stats;
-        if (inCombat) { if (currentState != BobState.InCombat) SetState(BobState.InCombat); return; }
-        else if (currentState == BobState.InCombat) { SetState(BobState.Flying); return; }
-
-        if (Time.frameCount % 300 == 0) Debug.Log($"[DragonBob] Current State: {currentState}. Pos: {transform.position}");
-
-        stateTimer += Time.deltaTime;
         
-        // Force Flying state if we somehow dropped out of it
-        if (currentState != BobState.Flying && currentState != BobState.InCombat)
+        // Locked to Flying state for shadow-casting role
+        if (currentState != BobState.Flying)
         {
             SetState(BobState.Flying);
         }
 
-        FlyToPOI();
+        stateTimer += Time.deltaTime;
+        
+        // New Behavior: Maintain shadow visibility around Steve
+        MaintainShadowNearPlayer();
+    }
+
+    private void MaintainShadowNearPlayer()
+    {
+        if (playerNav == null) return;
+
+        // Find the main directional light for shadow calculation
+        Light mainLight = null;
+        foreach (var l in Object.FindObjectsByType<Light>(FindObjectsInactive.Exclude)) {
+            if (l.type == LightType.Directional && l.shadows != LightShadows.None) { mainLight = l; break; }
+        }
+
+        if (mainLight == null) 
+        {
+            FlyToPOI(); // Fallback if no light
+            return;
+        }
+
+        Vector3 lightDir = mainLight.transform.forward;
+        if (lightDir.y >= -0.1f) 
+        {
+            FlyToPOI(); // Fallback if light is horizontal/up
+            return;
+        }
+
+        // We want the shadow to be in a 10m radius around Steve
+        // Let's make it slowly orbit or sway to look natural
+        float orbitSpeed = 0.2f;
+        float orbitRadius = 8f;
+        Vector3 offset = new Vector3(
+            Mathf.Cos(Time.time * orbitSpeed) * orbitRadius,
+            0,
+            Mathf.Sin(Time.time * orbitSpeed) * orbitRadius
+        );
+
+        Vector3 targetShadowPos = playerNav.transform.position + offset + playerNav.transform.forward * 2f;
+        
+        // Calculate Bob's world position to place shadow at targetShadowPos
+        float h = flyHeight + 5f;
+        Vector3 targetBobPos = targetShadowPos - lightDir * (h / -lightDir.y);
+
+        // Smoothly move Bob to this "shadow-optimized" position
+        transform.position = Vector3.Lerp(transform.position, targetBobPos, Time.deltaTime * 1.5f);
+
+        // Look in movement direction or towards player
+        Vector3 moveDir = (targetBobPos - transform.position).normalized;
+        if (moveDir.sqrMagnitude > 0.001f)
+        {
+            Quaternion targetRot = Quaternion.LookRotation(moveDir);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * rotateSpeed);
+        }
     }
 
     private void SetState(BobState newState)
     {
-        if (currentState == newState && newState != BobState.Resting) return;
+        if (currentState == newState) return;
         
-        // Prevent landing/resting states
-        if (newState == BobState.Landing || newState == BobState.Resting || newState == BobState.TakingOff)
-        {
-            newState = BobState.Flying;
-        }
+        // Only allow Flying state
+        newState = BobState.Flying;
 
         Debug.Log($"[DragonBob] STATE CHANGE: {currentState} -> {newState}");
         currentState = newState;
@@ -132,19 +176,7 @@ private bool hasRoaredOverPlayer = false;
 
         if (animator == null) return;
         
-        StopAllCoroutines(); // Stop any pending animation returns
-
-        switch (newState)
-        {
-            case BobState.Flying: 
-                Debug.Log("[DragonBob] Playing: Fly Forward");
-                animator.CrossFade("Fly Forward", 0.7f); 
-                hasRoaredOverPlayer = false; 
-                break;
-            case BobState.InCombat: 
-                StartCoroutine(CombatTransition()); 
-                break;
-        }
+        animator.CrossFade("Fly Forward", 0.7f); 
     }
 
     private void FlyToPOI()

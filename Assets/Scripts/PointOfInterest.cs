@@ -13,6 +13,10 @@ public class PointOfInterest : MonoBehaviour
 {
     public EnemyType enemyType = EnemyType.Orc;
     
+    [Header("Territory Settings")]
+    public float patrolRadius = 4.0f;
+    public float engagementRadius = 3.5f; // Reduced from 6.0f to avoid accidental engagements
+
     [Header("Prefabs")]
     public GameObject orcPrefab;
     public GameObject chestPrefab;
@@ -24,6 +28,33 @@ public class PointOfInterest : MonoBehaviour
     private void Start()
     {
         EnsureEnemy();
+    }
+
+    private void Update()
+    {
+        // Generic engagement check for non-patrolling enemies (Mushrooms, etc.)
+        if (enemyType != EnemyType.Orc && enemyType != EnemyType.DragonBob && enemyType != EnemyType.TreasureChest)
+        {
+            CheckProximityEngagement();
+        }
+    }
+
+    private void CheckProximityEngagement()
+    {
+        if (CombatSystem.Instance == null || CombatSystem.Instance.isInCombat) return;
+
+        CharacterStats stats = GetComponentInChildren<CharacterStats>();
+        if (stats == null || stats.isDead) return;
+
+        CharacterStats player = CombatSystem.Instance.playerStats;
+        if (player == null) return;
+
+        float dist = Vector3.Distance(transform.position, player.transform.position);
+        if (dist < engagementRadius)
+        {
+            Debug.Log($"[POI] {enemyType} at {name} engaging player at distance {dist}");
+            CombatSystem.Instance.StartCombat(stats);
+        }
     }
 
     public void EnsureEnemy()
@@ -62,8 +93,13 @@ public class PointOfInterest : MonoBehaviour
         GameObject enemy = Instantiate(prefab, transform.position, transform.rotation, transform);
         enemy.name = enemyType.ToString() + "_" + name;
         
-        if (enemyType != EnemyType.DragonBob && enemyType != EnemyType.Worm)
+        if (enemyType == EnemyType.Worm)
         {
+            enemy.transform.position += Vector3.down * 0.25f; // Sink him slightly
+        }
+
+        if (enemyType != EnemyType.DragonBob && enemyType != EnemyType.Worm)
+{
             enemy.transform.localScale = Vector3.one * 0.75f;
         }
 
@@ -110,5 +146,18 @@ public class PointOfInterest : MonoBehaviour
             var bar = canvas.GetComponentInChildren<HealthBar>();
             if (bar != null) bar.stats = stats;
         }
-    }
-}
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+        // Draw engagement radius
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(transform.position, engagementRadius);
+
+        if (enemyType == EnemyType.Orc)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(transform.position, patrolRadius);
+        }
+        }
+        }

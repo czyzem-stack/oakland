@@ -77,21 +77,35 @@ public class GenericPopup : MonoBehaviour
             return;
         }
 
-        // Fallback: Create a dedicated text object for this stat row to avoid "mushing" and allow scrolling
+        // Fallback: Create a dedicated row with two text objects for proper column alignment
         if (statsContainer != null)
         {
-            GameObject statObj = new GameObject("Stat_" + label, typeof(RectTransform), typeof(TextMeshProUGUI));
-            statObj.transform.SetParent(statsContainer, false);
-            TextMeshProUGUI t = statObj.GetComponent<TextMeshProUGUI>();
-            t.font = messageText != null ? messageText.font : null;
-            t.fontSize = messageText != null ? messageText.fontSize : 22;
-            t.color = messageText != null ? messageText.color : new Color(0.2f, 0.1f, 0f);
-            t.richText = true;
-            t.textWrappingMode = TextWrappingModes.NoWrap; // Prevent mushed wrap
-t.text = $"{label}<pos=90%>{value}";
+            GameObject rowObj = new GameObject("Stat_" + label, typeof(RectTransform));
+            rowObj.transform.SetParent(statsContainer, false);
             
-            // Layout Element to ensure it takes space in VerticalLayoutGroup
-            statObj.AddComponent<LayoutElement>().preferredHeight = t.fontSize * 1.5f;
+            // Add LayoutElement to row to ensure it takes space in VerticalLayoutGroup
+            float fontSize = messageText != null ? messageText.fontSize : 22;
+            rowObj.AddComponent<LayoutElement>().preferredHeight = fontSize * 1.5f;
+
+            // Label (Left)
+            GameObject labelObj = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            labelObj.transform.SetParent(rowObj.transform, false);
+            TextMeshProUGUI l = labelObj.GetComponent<TextMeshProUGUI>();
+            SetupStatText(l, label, TextAlignmentOptions.Left, fontSize);
+            l.rectTransform.anchorMin = Vector2.zero;
+            l.rectTransform.anchorMax = new Vector2(0.6f, 1f); // Give label 60% width
+            l.rectTransform.offsetMin = Vector2.zero;
+            l.rectTransform.offsetMax = Vector2.zero;
+
+            // Value (Right)
+            GameObject valueObj = new GameObject("Value", typeof(RectTransform), typeof(TextMeshProUGUI));
+            valueObj.transform.SetParent(rowObj.transform, false);
+            TextMeshProUGUI v = valueObj.GetComponent<TextMeshProUGUI>();
+            SetupStatText(v, value, TextAlignmentOptions.Right, fontSize);
+            v.rectTransform.anchorMin = new Vector2(0.6f, 0f);
+            v.rectTransform.anchorMax = Vector2.one; // Give value remaining 40% width
+            v.rectTransform.offsetMin = Vector2.zero;
+            v.rectTransform.offsetMax = Vector2.zero;
         }
         else if (messageText != null)
         {
@@ -101,7 +115,18 @@ t.text = $"{label}<pos=90%>{value}";
             else messageText.text += "\n";
             messageText.text += $"{label}<pos=90%>{value}";
         }
-    }
+        }
+
+        private void SetupStatText(TextMeshProUGUI t, string text, TextAlignmentOptions align, float fontSize)
+        {
+        t.font = messageText != null ? messageText.font : null;
+        t.fontSize = fontSize;
+        t.color = messageText != null ? messageText.color : new Color(0.9f, 0.9f, 0.9f);
+        t.richText = true;
+        t.textWrappingMode = TextWrappingModes.NoWrap;
+        t.alignment = align;
+        t.text = text;
+        }
 
     public void ClearStats()
     {

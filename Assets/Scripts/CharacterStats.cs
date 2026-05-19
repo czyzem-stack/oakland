@@ -20,9 +20,19 @@ public class CharacterStats : MonoBehaviour
     public int coins;
     public bool isDead = false;
 
+    [Header("Run Persistence")]
+    public int pointsGainedThisRun = 0;
+    public int permPointsToAssign = 0;
+
+    [Header("Permanent Bonus Stats")]
+    public int brawnPerm = 0;
+    public int finessePerm = 0;
+    public int witPerm = 0;
+    public int gritPerm = 0;
+
     [Header("Settings")]
     public int manaRegenPerInterval = 1;
-    public float regenInterval = 15.0f;
+    public float regenInterval = 5.0f; // Reduced from 15.0f for better flow
     private float regenTimer = 0f;
 
     public int maxXP = 100;
@@ -125,6 +135,8 @@ public class CharacterStats : MonoBehaviour
             case "Grit": grit += amount; break;
         }
         
+        pointsGainedThisRun += amount;
+        permPointsToAssign = pointsGainedThisRun / 2;
         RefreshCachedStats();
 
         // Refresh UI
@@ -139,14 +151,6 @@ public class CharacterStats : MonoBehaviour
         // Ensure values are capped/refilled properly after stat change (e.g. MaxHP might have increased)
         currentHP = MaxHP;
         currentMana = MaxMana;
-    }
-
-    private void Awake()
-    {
-        RefreshCachedStats();
-        currentHP = MaxHP;
-        currentMana = MaxMana;
-        currentStamina = MaxStamina;
     }
 
     private void Start()
@@ -181,6 +185,7 @@ public class CharacterStats : MonoBehaviour
         currentStamina = MaxStamina;
         currentXP = 0; 
         isDead = false;
+        pointsGainedThisRun = 0;
     }
 
     public void ConsumeMana(int amount)
@@ -216,6 +221,28 @@ public class CharacterStats : MonoBehaviour
         }
     }
 
+    private void Awake()
+{
+        LoadPermStats();
+        RefreshCachedStats();
+        currentHP = MaxHP;
+        currentMana = MaxMana;
+        currentStamina = MaxStamina;
+    }
+
+    private void LoadPermStats()
+    {
+        brawnPerm = PlayerPrefs.GetInt("Perm_Brawn", 0);
+        finessePerm = PlayerPrefs.GetInt("Perm_Finesse", 0);
+        witPerm = PlayerPrefs.GetInt("Perm_Wit", 0);
+        gritPerm = PlayerPrefs.GetInt("Perm_Grit", 0);
+
+        brawn += brawnPerm;
+        finesse += finessePerm;
+        wit += witPerm;
+        grit += gritPerm;
+    }
+
     public void TakeDamage(float amount)
     {
         if (isDead) return;
@@ -224,9 +251,61 @@ public class CharacterStats : MonoBehaviour
         currentStamina = Mathf.Max(0, currentStamina - amount);
         currentHP = Mathf.Max(0, currentHP - amount);
         
-        if (currentHP <= 0) isDead = true;
-    }
+        if (currentHP <= 0) 
+        {
+            currentHP = 0;
+            if (CombatSystem.Instance != null && this == CombatSystem.Instance.playerStats)
+            {
+                Die();
+            }
+            else
+            {
+                isDead = true;
+            }
+        }
 }
+
+    private void Die()
+    {
+        isDead = true;
+        Debug.Log("[CharacterStats] Steve has died!");
+        
+        if (CombatSystem.Instance != null)
+        {
+            CombatSystem.Instance.isInCombat = false;
+        }
+
+        // Pick 2 random stats for the permanent upgrade choice
+        string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
+        System.Collections.Generic.List<string> choices = new System.Collections.Generic.List<string>(stats);
+        
+        string s1 = choices[UnityEngine.Random.Range(0, choices.Count)];
+        choices.Remove(s1);
+        string s2 = choices[UnityEngine.Random.Range(0, choices.Count)];
+
+        int bonus = permPointsToAssign;
+
+        GenericPopup.Show(
+            "STEVE HAS FALLEN",
+            $"You gained {pointsGainedThisRun} points this run.\nChoose a permanent enhancement for your next soul (+{bonus}):",
+            s1, s2, null,
+            () => ApplyPermUpgrade(s1, bonus),
+            () => ApplyPermUpgrade(s2, bonus)
+        );
+    }
+
+    private void ApplyPermUpgrade(string statName, int amount)
+    {
+        int current = PlayerPrefs.GetInt("Perm_" + statName, 0);
+        PlayerPrefs.SetInt("Perm_" + statName, current + amount);
+        PlayerPrefs.Save();
+
+        Debug.Log($"[CharacterStats] Permanent Upgrade: +{amount} {statName}. Persisting to next run.");
+        
+        // Reload scene to restart the game
+        UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+    }
+    }
 
 
 

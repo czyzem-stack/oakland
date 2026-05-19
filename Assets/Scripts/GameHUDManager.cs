@@ -40,7 +40,7 @@ public class GameHUDManager : MonoBehaviour
         if (!Application.isPlaying) return;
 
         if (playerNameText != null) playerNameText.text = "Steve";
-        if (rollButtonText != null) rollButtonText.text = "PLAY!"; // Re-matching "PLAY!" from image
+        if (rollButtonText != null) rollButtonText.text = "ROLL"; 
         if (gemText != null) gemText.text = "100";
 
         // Auto-assign if null

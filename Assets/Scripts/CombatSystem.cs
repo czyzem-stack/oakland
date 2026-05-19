@@ -193,10 +193,10 @@ public class CombatSystem : MonoBehaviour
         bool isCritical = rollValue >= playerStats.critThreshold; 
         Animator playerAnim = playerStats.GetComponent<Animator>();
         
-        Debug.Log("[CombatSystem] Steve attacking!");
-        if (playerAnim != null) playerAnim.SafeSetTrigger("Attack");
-
-        yield return new WaitForSeconds(0.35f);
+        Debug.Log($"[CombatSystem] Instant impact for roll: {rollValue}");
+        
+        // Very short delay to line up with the weapon-dice-burst
+        yield return new WaitForSeconds(0.1f);
 
         if (currentEnemyStats == null) 
         {
@@ -217,17 +217,19 @@ public class CombatSystem : MonoBehaviour
             Destroy(fx, 2f);
         }
 
-        if (camFollow != null) camFollow.Shake(0.2f, isCritical ? 0.35f : 0.18f);
+        // Punchy feedback
+        if (camFollow != null) camFollow.Shake(0.12f, isCritical ? 0.4f : 0.2f);
 
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
         if (enemyAnim != null)
         {
             bool isWorm = currentEnemyStats.name.Contains("Worm");
-            if (isWorm) enemyAnim.CrossFade("GetHit", 0.1f);
+            if (isWorm) enemyAnim.CrossFade("GetHit", 0.05f);
             else enemyAnim.SafeSetTrigger("GetHit");
         }
 
-        yield return new WaitForSeconds(1.0f);
+        // Ultra fast turnaround
+        yield return new WaitForSeconds(0.4f); 
 
         if (currentEnemyStats != null && currentEnemyStats.currentHP <= 0)
         {
@@ -245,7 +247,7 @@ public class CombatSystem : MonoBehaviour
                 if (isDragon || isWorm) enemyAnim.CrossFade("Die", 0.1f);
                 else enemyAnim.SafeSetTrigger("Die");
             }
-            yield return new WaitForSeconds(0.5f);
+            yield return new WaitForSeconds(0.4f);
             EndCombat(true);
         }
         else
@@ -278,7 +280,8 @@ public class CombatSystem : MonoBehaviour
             else enemyAnim.SafeSetTrigger("Attack");
         }
 
-        yield return new WaitForSeconds(0.35f);
+        // Faster enemy impact
+        yield return new WaitForSeconds(0.25f);
 
         int enemyRoll = Random.Range(1, 13);
         bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
@@ -294,12 +297,13 @@ public class CombatSystem : MonoBehaviour
             Destroy(fx, 2f);
         }
 
-        if (camFollow != null) camFollow.Shake(0.2f, isCritical ? 0.25f : 0.12f);
+        if (camFollow != null) camFollow.Shake(0.12f, isCritical ? 0.3f : 0.15f);
 
         Animator playerAnim = playerStats.GetComponent<Animator>();
         if (playerAnim != null) playerAnim.SafeSetTrigger("GetHit");
 
-        yield return new WaitForSeconds(1.0f);
+        // Faster turnaround for next turn
+        yield return new WaitForSeconds(0.5f);
         if (isDragon && enemyAnim != null) enemyAnim.CrossFade("Fly Float", 0.5f);
     }
 
