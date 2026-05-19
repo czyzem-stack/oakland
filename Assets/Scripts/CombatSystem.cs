@@ -21,7 +21,8 @@ public class CombatSystem : MonoBehaviour
     {
         Instance = this;
         // Try to find a default TMP font
-        damageFont = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
+        damageFont = Resources.Load<TMP_FontAsset>("Fonts/Alata-Regular SDF");
+        if (damageFont == null) damageFont = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
         
         if (hitEffectPrefab == null)
         {
@@ -319,8 +320,9 @@ public class CombatSystem : MonoBehaviour
         textGo.transform.SetParent(canvasGo.transform, false);
         TextMeshProUGUI t = textGo.GetComponent<TextMeshProUGUI>();
         
-        t.font = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
-        t.fontSize = 60; 
+        t.font = Resources.Load<TMP_FontAsset>("Alata-Regular SDF");
+        if (t.font == null) t.font = Resources.Load<TMP_FontAsset>("LiberationSans SDF"); // Fallback
+t.fontSize = 60; 
         t.alignment = TextAlignmentOptions.Center;
         t.textWrappingMode = TextWrappingModes.NoWrap;
         
@@ -386,12 +388,44 @@ public class CombatSystem : MonoBehaviour
             GameObject.Destroy(currentEnemyStats.gameObject, isDragon ? 3.0f : 1.5f);
             currentEnemyStats = null;
 
-            if (isChest && TreasureUpgradeUI.Instance != null) TreasureUpgradeUI.Instance.ShowUpgrade(playerStats);
+            if (isChest)
+            {
+                ShowChestUpgradePopup();
+            }
             else
             {
                 var nav = playerStats.GetComponent<HeroNavigation>();
                 if (nav != null) nav.ResumeAfterCombat();
             }
-        }
-    }
+            }
+            }
+
+            private void ShowChestUpgradePopup()
+            {
+            // Pick 2 random stats to upgrade
+            string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
+            System.Collections.Generic.List<string> choices = new System.Collections.Generic.List<string>(stats);
+        
+            string s1 = choices[UnityEngine.Random.Range(0, choices.Count)];
+            choices.Remove(s1);
+            string s2 = choices[UnityEngine.Random.Range(0, choices.Count)];
+
+            GenericPopup.Show(
+            "CHEST LOOTED",
+            "Inside the chest you find ancient knowledge! Choose a stat to enhance:",
+            s1, s2, null,
+            () => ApplyChestUpgrade(s1),
+            () => ApplyChestUpgrade(s2)
+            );
+            }
+
+            private void ApplyChestUpgrade(string statName)
+            {
+                if (playerStats == null) return;
+                playerStats.ApplyStatUpgrade(statName, 2, true);
+
+                // Resume navigation
+                var nav = playerStats.GetComponent<HeroNavigation>();
+                if (nav != null) nav.ResumeAfterCombat();
+            }
 }

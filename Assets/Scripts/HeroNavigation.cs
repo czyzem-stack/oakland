@@ -49,7 +49,7 @@ public class HeroNavigation : MonoBehaviour
             {
                 GameObject canvas = Instantiate(poi.healthCanvasPrefab, worm.transform);
                 canvas.name = "HealthCanvas";
-                canvas.transform.localPosition = new Vector3(0, 2.2f, 0);
+                canvas.transform.localPosition = new Vector3(0, 3.0f, 0);
                 var bar = canvas.GetComponentInChildren<HealthBar>();
                 if (bar != null) bar.stats = wormStats;
             }

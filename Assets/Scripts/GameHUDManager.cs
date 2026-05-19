@@ -26,6 +26,8 @@ public class GameHUDManager : MonoBehaviour
     [Header("Bottom Bar")]
     public Button rollButton;
     public TMP_Text rollButtonText;
+    public Button heroesButton;
+    public StatDisplayConfig statsConfig;
 
     private int lastLevel = -1;
     private float lastXP = -1;
@@ -37,7 +39,7 @@ public class GameHUDManager : MonoBehaviour
     {
         if (!Application.isPlaying) return;
 
-        if (playerNameText != null) playerNameText.text = "Ryuen";
+        if (playerNameText != null) playerNameText.text = "Steve";
         if (rollButtonText != null) rollButtonText.text = "PLAY!"; // Re-matching "PLAY!" from image
         if (gemText != null) gemText.text = "100";
 
@@ -54,9 +56,17 @@ public class GameHUDManager : MonoBehaviour
         }
         if (xpText == null) xpText = GameObject.Find("Text_Value")?.GetComponent<TMP_Text>();
         if (hpText == null) hpText = GameObject.Find("Text_StaminaValue")?.GetComponent<TMP_Text>();
+        
+        if (heroesButton == null)
+        {
+            GameObject go = GameObject.Find("Nav_HEROES");
+            if (go != null) heroesButton = go.GetComponent<Button>();
+        }
+
+        if (heroesButton != null) heroesButton.onClick.AddListener(ShowSteveStats);
 
         // FORCE Colors
-        if (hpFill != null) hpFill.color = Color.red;
+if (hpFill != null) hpFill.color = Color.red;
         if (xpFill != null) xpFill.color = new Color(0.1f, 0.4f, 1f); // Nice Blue
 
         // Clear stamina trackers to prevent interference
@@ -123,7 +133,11 @@ public class GameHUDManager : MonoBehaviour
         if (Mathf.Abs(currentMana - lastMana) > 0.1f || !Application.isPlaying)
         {
             lastMana = currentMana;
-            if (energyText != null) energyText.text = $"{(int)currentMana} / {maxMana}";
+            if (energyText != null) 
+            {
+                energyText.text = $"{(int)currentMana} / {maxMana}";
+                energyText.color = Color.white;
+            }
             if (energyFill != null && maxMana > 0) energyFill.fillAmount = currentMana / (float)maxMana;
         }
 
@@ -133,5 +147,46 @@ public class GameHUDManager : MonoBehaviour
             lastCoins = playerStats.coins;
             if (coinText != null) coinText.text = lastCoins.ToString("N0");
         }
-    }
+        }
+
+        private void ShowSteveStats()
+        {
+            if (playerStats == null) return;
+
+            if (statsConfig != null)
+            {
+                statsConfig.ShowStats();
+                return;
+            }
+
+            GenericPopup popup = GenericPopup.Show("STEVE'S STATS", "", "CLOSE");
+if (popup != null)
+            {
+                popup.ClearStats();
+            
+                // Header
+                popup.AddStat("<b>NAME</b>", "STEVE");
+                popup.AddStat("<b>LEVEL</b>", playerStats.level.ToString());
+                popup.AddStat(" ", " "); // Spacer
+            
+                // Base Stats
+                popup.AddStat("Brawn", playerStats.brawn.ToString());
+                popup.AddStat("Finesse", playerStats.finesse.ToString());
+                popup.AddStat("Wit", playerStats.wit.ToString());
+                popup.AddStat("Grit", playerStats.grit.ToString());
+            
+                // Derived Stats
+                popup.AddStat(" ", " "); // Spacer
+                popup.AddStat("<i>Melee Damage</i>", playerStats.MeleeDamage.ToString());
+                popup.AddStat("<i>Ranged Damage</i>", playerStats.RangedDamage.ToString());
+                popup.AddStat("<i>Defense</i>", playerStats.Defense.ToString());
+                popup.AddStat("<i>Crit Chance</i>", $"{playerStats.CritChance:F1}%");
+            
+                // Current Status
+                popup.AddStat(" ", " "); // Spacer
+                popup.AddStat("HP", $"{(int)playerStats.currentHP} / {playerStats.MaxHP}");
+                popup.AddStat("Energy", $"{(int)playerStats.currentMana} / {playerStats.MaxMana}");
+                popup.AddStat("XP", $"{(int)playerStats.currentXP} / {playerStats.MaxXP}");
+            }
+        }
 }

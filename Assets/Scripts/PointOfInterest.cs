@@ -97,14 +97,14 @@ public class PointOfInterest : MonoBehaviour
         {
             GameObject canvas = Instantiate(healthCanvasPrefab, enemy.transform);
             canvas.name = "HealthCanvas";
-            float height = 2.0f;
+            float height = 2.5f;
             switch (enemyType)
             {
-                case EnemyType.Orc: height = 2.5f; break;
-                case EnemyType.Mushroom: height = 1.6f; break;
-                case EnemyType.TreasureChest: height = 1.8f; break;
-                case EnemyType.DragonBob: height = 4.0f; break;
-                case EnemyType.Worm: height = 2.2f; break;
+                case EnemyType.Orc: height = 3.0f; break;
+                case EnemyType.Mushroom: height = 2.0f; break;
+                case EnemyType.TreasureChest: height = 2.2f; break;
+                case EnemyType.DragonBob: height = 5.5f; break;
+                case EnemyType.Worm: height = 2.8f; break;
             }
             canvas.transform.localPosition = new Vector3(0, height, 0);
             var bar = canvas.GetComponentInChildren<HealthBar>();

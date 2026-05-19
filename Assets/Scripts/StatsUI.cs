@@ -30,7 +30,11 @@ public class StatsUI : MonoBehaviour
         if (gritText != null) gritText.text = $"Grit: {stats.grit}";
 
         if (hpText != null) hpText.text = $"HP: {stats.currentHP:F0} / {stats.MaxHP}";
-        if (mpText != null) mpText.text = $"Mana: {stats.currentMana:F0} / {stats.MaxMana}";
+        if (mpText != null) 
+        {
+            mpText.text = $"Energy: {stats.currentMana:F0} / {stats.MaxMana}";
+            mpText.color = Color.white;
+        }
         if (damageText != null) damageText.text = $"Damage: {stats.MeleeDamage} (M) / {stats.RangedDamage} (R)";
         if (defenseText != null) defenseText.text = $"Defense: {stats.Defense}";
         if (critText != null) critText.text = $"Crit: {stats.critThreshold}+";

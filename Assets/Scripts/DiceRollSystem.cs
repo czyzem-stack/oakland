@@ -152,7 +152,7 @@ List<GameObject> tempObjects = new List<GameObject>();
             steveAnimator.SetTrigger("Roll");
         }
 
-        // Consume 1 Mana per roll
+        // Consume 1 Energy per roll
         CharacterStats stats = GetComponentInParent<CharacterStats>();
         if (stats == null) stats = GetComponentInChildren<CharacterStats>();
         if (stats != null) stats.ConsumeMana(1);

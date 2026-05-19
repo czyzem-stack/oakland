@@ -131,6 +131,9 @@ private bool hasRoaredOverPlayer = false;
         }
 
         if (animator == null) return;
+        
+        StopAllCoroutines(); // Stop any pending animation returns
+
         switch (newState)
         {
             case BobState.Flying: 
@@ -170,10 +173,26 @@ private bool hasRoaredOverPlayer = false;
 
         if (playerNav != null && !hasRoaredOverPlayer) {
             float horizontalDist = Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(playerNav.transform.position.x, playerNav.transform.position.z));
-            if (horizontalDist < 12f) { animator.CrossFade("Scream", 0.4f); hasRoaredOverPlayer = true; }
+            if (horizontalDist < 12f) { 
+                StartCoroutine(RoarRoutine());
+                hasRoaredOverPlayer = true; 
+            }
         }
         
         if (Vector3.Distance(transform.position, targetPos) < arrivalDistance) PickNewTargetPOI();
+    }
+
+    private IEnumerator RoarRoutine()
+    {
+        if (animator != null)
+        {
+            animator.CrossFade("Scream", 0.4f);
+            yield return new WaitForSeconds(2.5f); // Duration of the roar
+            if (currentState == BobState.Flying)
+            {
+                animator.CrossFade("Fly Forward", 0.6f);
+            }
+        }
     }
 
     private void LandingLogic() { }

@@ -30,6 +30,7 @@ public class ManaBar : MonoBehaviour
                 if (stats.currentMana < stats.MaxMana)
                 {
                     countdownText.text = $"{currentRegen:F0}s";
+                    countdownText.color = Color.white;
                 }
                 else
                 {

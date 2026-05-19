@@ -59,13 +59,71 @@ public class CharacterStats : MonoBehaviour
     {
         currentXP -= MaxXP;
         level++;
+
+        // Passive +1 to a random stat
+        string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
+        string randomStat = stats[UnityEngine.Random.Range(0, stats.Length)];
+        ApplyStatUpgrade(randomStat, 1, false); 
+        
         currentHP = MaxHP; // Heal on level up
-        Debug.Log($"[CharacterStats] LEVEL UP! Now Level {level}. Next XP: {MaxXP}");
+        currentMana = MaxMana; // Refill Energy on level up
+        Debug.Log($"[CharacterStats] LEVEL UP! Now Level {level}. Passive +1 {randomStat}. Next XP: {MaxXP}");
         
         if (CombatSystem.Instance != null)
         {
             CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 3.0f, "LEVEL UP!", Color.cyan);
+            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.2f, $"+1 {randomStat}!", Color.yellow);
         }
+
+        ShowLevelUpPopup();
+    }
+
+    private void ShowLevelUpPopup()
+    {
+        // Pick 3 random stats to upgrade
+        string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
+        System.Collections.Generic.List<string> choices = new System.Collections.Generic.List<string>(stats);
+        
+        string s1 = choices[UnityEngine.Random.Range(0, choices.Count)];
+        choices.Remove(s1);
+        string s2 = choices[UnityEngine.Random.Range(0, choices.Count)];
+        choices.Remove(s2);
+        string s3 = choices[UnityEngine.Random.Range(0, choices.Count)];
+
+        GenericPopup.Show(
+            "LEVEL UP!",
+            $"Choose a stat to upgrade for Level {level}:\n(You also gained a passive +1 in a random stat!)",
+            $"+2 {s1}", $"+2 {s2}", $"+2 {s3}",
+            () => ApplyStatUpgrade(s1, 2, true),
+            () => ApplyStatUpgrade(s2, 2, true),
+            () => ApplyStatUpgrade(s3, 2, true)
+        );
+    }
+
+    public float CritChance => Mathf.Clamp01((13 - critThreshold) / 12f) * 100f;
+
+    public void ApplyStatUpgrade(string statName, int amount, bool showFeedback)
+{
+        switch (statName)
+        {
+            case "Brawn": brawn += amount; break;
+            case "Finesse": finesse += amount; break;
+            case "Wit": wit += amount; break;
+            case "Grit": grit += amount; break;
+        }
+        
+        // Refresh UI
+        var statsUI = UnityEngine.Object.FindAnyObjectByType<StatsUI>();
+        if (statsUI != null) statsUI.Refresh();
+        
+        if (showFeedback)
+        {
+            CombatSystem.Instance?.SpawnDamageText(transform.position + Vector3.up * 2f, $"+{amount} {statName}!", Color.green);
+        }
+        
+        // Ensure values are capped/refilled properly after stat change (e.g. MaxHP might have increased)
+        currentHP = MaxHP;
+        currentMana = MaxMana;
     }
 
     private void Awake()
@@ -110,22 +168,22 @@ public class CharacterStats : MonoBehaviour
     public void ConsumeMana(int amount)
     {
         currentMana = Mathf.Max(0, currentMana - amount);
-        Debug.Log($"[CharacterStats] Consumed {amount} Mana. Current: {currentMana}/{MaxMana}");
+        Debug.Log($"[CharacterStats] Consumed {amount} Energy. Current: {currentMana}/{MaxMana}");
         
         if (CombatSystem.Instance != null)
         {
-            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"-{amount} Mana", new Color(0.2f, 0.5f, 1f));
+            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"-{amount} Energy", new Color(0.6f, 0f, 1f));
         }
     }
 
     public void RegenerateMana(int amount)
     {
         currentMana = Mathf.Min(currentMana + amount, MaxMana);
-        Debug.Log($"[CharacterStats] Regenerated {amount} Mana. Current: {currentMana}/{MaxMana}");
+        Debug.Log($"[CharacterStats] Regenerated {amount} Energy. Current: {currentMana}/{MaxMana}");
         
         if (CombatSystem.Instance != null)
         {
-            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"+{amount} Mana", new Color(0.4f, 0.8f, 1f));
+            CombatSystem.Instance.SpawnDamageText(transform.position + Vector3.up * 2.5f, $"+{amount} Energy", new Color(0.7f, 0.2f, 1f));
         }
     }
 
