@@ -76,18 +76,9 @@ if (hpFill != null) hpFill.color = Color.red;
 
     private void Update()
     {
-        if (playerStats == null) 
+        if (playerStats == null)
         {
-            if (Application.isPlaying)
-            {
-                // Only find once and cache
-                playerStats = Object.FindAnyObjectByType<CharacterStats>();
-            }
-            else
-            {
-                playerStats = Object.FindAnyObjectByType<CharacterStats>();
-            }
-            
+            playerStats = PlayerReference.GetStats();
             if (playerStats == null) return;
         }
 
@@ -156,9 +147,9 @@ if (hpFill != null) hpFill.color = Color.red;
             lastCoins = playerStats.coins;
             if (coinText != null) coinText.text = lastCoins.ToString("N0");
         }
-        }
+    }
 
-        private void ShowSteveStats()
+    private void ShowSteveStats()
         {
             if (playerStats == null) return;
 

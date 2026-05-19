@@ -350,10 +350,10 @@ t.fontSize = 60;
     public void EndCombat(bool playerWon)
     {
         if (!isInCombat) return;
-isInCombat = false;
+        isInCombat = false;
         isPlayerTurn = false;
         isAttackSequenceRunning = false;
-        
+
         Animator playerAnim = playerStats.GetComponent<Animator>();
         if (playerAnim != null)
         {
@@ -362,7 +362,7 @@ isInCombat = false;
             playerAnim.SafeSetFloat("Speed", 0f);
         }
 
-        if (camFollow != null) 
+        if (camFollow != null)
         {
             camFollow.isCombatOrbiting = false;
             camFollow.target = playerStats.transform;
@@ -396,43 +396,39 @@ isInCombat = false;
             currentEnemyStats = null;
 
             if (isChest)
-            {
                 ShowChestUpgradePopup();
-            }
             else
             {
                 var nav = playerStats.GetComponent<HeroNavigation>();
                 if (nav != null) nav.ResumeAfterCombat();
             }
-            }
-            }
+        }
+    }
 
-            private void ShowChestUpgradePopup()
-            {
-            // Pick 2 random stats to upgrade
-            string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
-            System.Collections.Generic.List<string> choices = new System.Collections.Generic.List<string>(stats);
-        
-            string s1 = choices[UnityEngine.Random.Range(0, choices.Count)];
-            choices.Remove(s1);
-            string s2 = choices[UnityEngine.Random.Range(0, choices.Count)];
+    public void ShowChestUpgradePopup()
+    {
+        string[] statNames = { "Brawn", "Finesse", "Wit", "Grit" };
+        List<string> choices = new List<string>(statNames);
 
-            GenericPopup.Show(
+        string s1 = choices[Random.Range(0, choices.Count)];
+        choices.Remove(s1);
+        string s2 = choices[Random.Range(0, choices.Count)];
+
+        GenericPopup.Show(
             "CHEST LOOTED",
             "Inside the chest you find ancient knowledge! Choose a stat to enhance:",
             s1, s2, null,
             () => ApplyChestUpgrade(s1),
             () => ApplyChestUpgrade(s2)
-            );
-            }
+        );
+    }
 
-            private void ApplyChestUpgrade(string statName)
-            {
-                if (playerStats == null) return;
-                playerStats.ApplyStatUpgrade(statName, 2, true);
+    private void ApplyChestUpgrade(string statName)
+    {
+        if (playerStats == null) return;
+        playerStats.ApplyStatUpgrade(statName, 2, true);
 
-                // Resume navigation
-                var nav = playerStats.GetComponent<HeroNavigation>();
-                if (nav != null) nav.ResumeAfterCombat();
-            }
+        var nav = playerStats.GetComponent<HeroNavigation>();
+        if (nav != null) nav.ResumeAfterCombat();
+    }
 }

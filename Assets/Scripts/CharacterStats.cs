@@ -263,7 +263,7 @@ public class CharacterStats : MonoBehaviour
                 isDead = true;
             }
         }
-}
+    }
 
     private void Die()
     {
@@ -305,7 +305,7 @@ string[] stats = { "Brawn", "Finesse", "Wit", "Grit" };
         // Reload scene to restart the game
         UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
-    }
+}
 
 
 

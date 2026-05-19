@@ -41,6 +41,8 @@ public class DiceRollSystem : MonoBehaviour
     private List<Rigidbody> activeDiceRBs = new List<Rigidbody>();
     public bool isRolling = false;
     public bool autoRoll = false;
+    private float nextAutoRollTime;
+    private const float CombatAutoRollCooldown = 0.75f;
     private GameObject worldDiceContainer;
 
     public static bool WarmedUp = false;
@@ -57,7 +59,7 @@ public class DiceRollSystem : MonoBehaviour
 
     private void Update()
     {
-        if (autoRoll && CanRoll)
+        if (autoRoll && CanRoll && Time.time >= nextAutoRollTime)
         {
             Roll();
         }
@@ -176,7 +178,9 @@ public class DiceRollSystem : MonoBehaviour
         }
 
         bool inCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat;
-        
+        if (inCombat)
+            nextAutoRollTime = Time.time + CombatAutoRollCooldown;
+
         if (steveAnimator != null)
         {
             // If in combat, skip the 'Roll' prep and go right to 'Attack'
@@ -373,9 +377,10 @@ public class DiceRollSystem : MonoBehaviour
             StartCoroutine(AnimateFloatingText(resultText));
         }
 
-        if (pStats != null) 
+        bool inCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat;
+        if (pStats != null && !inCombat)
         {
-            pStats.AddXP(total); 
+            pStats.AddXP(total);
         }
 
         OnAnyDiceRolled?.Invoke(total);

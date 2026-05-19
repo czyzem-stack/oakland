@@ -13,15 +13,7 @@ public class CoinUI : MonoBehaviour
 
     private void FindPlayer()
     {
-        HeroNavigation hero = Object.FindAnyObjectByType<HeroNavigation>();
-        if (hero != null)
-        {
-            playerStats = hero.GetComponent<CharacterStats>();
-            if (playerStats != null)
-            {
-                Debug.Log($"[CoinUI] Found player {hero.name} and CharacterStats.");
-            }
-        }
+        playerStats = PlayerReference.GetStats();
     }
 
     private int lastCoins = -1;

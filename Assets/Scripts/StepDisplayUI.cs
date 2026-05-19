@@ -8,7 +8,7 @@ public class StepDisplayUI : MonoBehaviour
 
     void Start()
     {
-        playerNav = Object.FindAnyObjectByType<HeroNavigation>();
+        playerNav = PlayerReference.GetNavigation();
     }
 
     private string lastText = "";

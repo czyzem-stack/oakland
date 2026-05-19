@@ -10,7 +10,7 @@ public class StatDisplayConfig : MonoBehaviour
 
     public void ShowStats()
     {
-        CharacterStats player = Object.FindAnyObjectByType<CharacterStats>();
+        CharacterStats player = PlayerReference.GetStats();
         if (player == null) return;
 
         GenericPopup popup = GenericPopup.Show(title, "", "CLOSE");

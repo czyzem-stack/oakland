@@ -340,7 +340,8 @@ CharacterStats wormStats = worm.GetComponent<CharacterStats>();
                     else stats.AddGold(Random.Range(5, 11));
                     GameObject.Destroy(enemyStats.gameObject, isDragon ? 3f : 2f);
                     StopMoving("Enemy Defeated by Impact");
-                    if (isChest && TreasureUpgradeUI.Instance != null) TreasureUpgradeUI.Instance.ShowUpgrade(stats);
+                    if (isChest && CombatSystem.Instance != null)
+                        CombatSystem.Instance.ShowChestUpgradePopup();
                     currentTarget = null;
                     return;
                 }

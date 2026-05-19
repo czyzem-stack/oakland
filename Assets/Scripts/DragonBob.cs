@@ -30,12 +30,14 @@ private bool hasRoaredOverPlayer = false;
     private HeroNavigation playerNav;
     private float stateTimer = 0f;
     private NavMeshObstacle obstacle;
+    private Light cachedDirectionalLight;
 
     void Start()
     {
         animator = GetComponentInChildren<Animator>();
         stats = GetComponent<CharacterStats>();
-        playerNav = Object.FindAnyObjectByType<HeroNavigation>();
+        playerNav = PlayerReference.GetNavigation();
+        cachedDirectionalLight = FindDirectionalLight();
         transform.localScale = Vector3.one * 2.5f;
 
         // Ensure Bob has a NavMeshObstacle to make Steve walk around him when landed
@@ -68,10 +70,7 @@ private bool hasRoaredOverPlayer = false;
         if (playerNav == null) { transform.position = new Vector3(-100, flyHeight + 30, -100); return; }
 
         // Find the main directional light
-        Light mainLight = null;
-        foreach (var l in Object.FindObjectsByType<Light>(FindObjectsInactive.Exclude)) {
-            if (l.type == LightType.Directional && l.shadows != LightShadows.None) { mainLight = l; break; }
-        }
+        Light mainLight = cachedDirectionalLight ?? FindDirectionalLight();
 
         float targetBobHeight = flyHeight + 20f;
         Vector3 playerPos = playerNav.transform.position;
@@ -88,6 +87,19 @@ private bool hasRoaredOverPlayer = false;
             }
         }
         transform.position = playerPos + Vector3.back * 40f + Vector3.up * targetBobHeight;
+    }
+
+    private Light FindDirectionalLight()
+    {
+        foreach (var l in Object.FindObjectsByType<Light>(FindObjectsInactive.Exclude))
+        {
+            if (l.type == LightType.Directional && l.shadows != LightShadows.None)
+            {
+                cachedDirectionalLight = l;
+                return l;
+            }
+        }
+        return null;
     }
 
     private void OnDestroy() { DiceRollSystem.OnAnyDiceRolled -= HandleDiceRoll; }
@@ -113,12 +125,9 @@ private bool hasRoaredOverPlayer = false;
         if (playerNav == null) return;
 
         // Find the main directional light for shadow calculation
-        Light mainLight = null;
-        foreach (var l in Object.FindObjectsByType<Light>(FindObjectsInactive.Exclude)) {
-            if (l.type == LightType.Directional && l.shadows != LightShadows.None) { mainLight = l; break; }
-        }
+        Light mainLight = cachedDirectionalLight ?? FindDirectionalLight();
 
-        if (mainLight == null) 
+        if (mainLight == null)
         {
             FlyToPOI(); // Fallback if no light
             return;

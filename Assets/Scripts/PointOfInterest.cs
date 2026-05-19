@@ -45,7 +45,6 @@ public class PointOfInterest : MonoBehaviour
 
         CharacterStats stats = GetComponentInChildren<CharacterStats>();
         if (stats == null || stats.isDead) return;
-if (stats == null || stats.isDead) return;
 
         CharacterStats player = CombatSystem.Instance.playerStats;
         if (player == null) return;
@@ -147,11 +146,10 @@ if (stats == null || stats.isDead) return;
             var bar = canvas.GetComponentInChildren<HealthBar>();
             if (bar != null) bar.stats = stats;
         }
-        }
+    }
 
-        private void OnDrawGizmosSelected()
-        {
-        // Draw engagement radius
+    private void OnDrawGizmosSelected()
+    {
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, engagementRadius);
 
@@ -160,5 +158,5 @@ if (stats == null || stats.isDead) return;
             Gizmos.color = Color.green;
             Gizmos.DrawWireSphere(transform.position, patrolRadius);
         }
-        }
-        }
+    }
+}
