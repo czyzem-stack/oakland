@@ -17,7 +17,7 @@ public class GameHUDManager : MonoBehaviour
     public TMP_Text staminaText;
 
     [Header("Top Bar")]
-    public Image energyFill; // If using a fill, otherwise text
+    public Image energyFill;
     public TMP_Text energyText;
     public TMP_Text gemText;
     public TMP_Text coinText;
@@ -27,6 +27,12 @@ public class GameHUDManager : MonoBehaviour
     public TMP_Text rollButtonText;
     public Button heroesButton;
     public StatDisplayConfig statsConfig;
+
+    [Header("Navigation")]
+    public TMP_Text stepText;
+
+    private HeroNavigation playerNav;
+    private string lastStepText = "";
 
     private int lastLevel = -1;
     private float lastXP = -1;
@@ -42,11 +48,10 @@ public class GameHUDManager : MonoBehaviour
         if (!Application.isPlaying) return;
 
         if (playerNameText != null) playerNameText.text = "Steve";
-        if (rollButtonText != null) rollButtonText.text = "ROLL"; 
+        if (rollButtonText != null) rollButtonText.text = "ROLL";
         if (gemText != null) gemText.text = "100";
 
-        // Auto-assign if null
-        if (xpFill == null) 
+        if (xpFill == null)
         {
             GameObject s = GameObject.Find("Slider");
             if (s != null) xpFill = s.transform.Find("FillArea/Fill")?.GetComponent<Image>();
@@ -58,12 +63,11 @@ public class GameHUDManager : MonoBehaviour
         }
         if (xpText == null) xpText = GameObject.Find("Text_Value")?.GetComponent<TMP_Text>();
         if (hpText == null) hpText = GameObject.Find("Text_StaminaValue")?.GetComponent<TMP_Text>();
-        
-        // Find Nav_HEROES robustly
+
         if (heroesButton == null)
         {
             Button[] allButtons = Object.FindObjectsByType<Button>(FindObjectsInactive.Include);
-            foreach(var b in allButtons)
+            foreach (var b in allButtons)
             {
                 if (b.name == "Nav_HEROES")
                 {
@@ -77,45 +81,80 @@ public class GameHUDManager : MonoBehaviour
         {
             heroesButton.onClick.RemoveAllListeners();
             heroesButton.onClick.AddListener(ShowSteveStats);
-            Debug.Log("[GameHUDManager] Wired up Nav_HEROES button listener.");
-        }
-        else
-        {
-            Debug.LogError("[GameHUDManager] FAILED to find Nav_HEROES button!");
         }
 
-        // FORCE Colors
         if (hpFill != null) hpFill.color = Color.red;
-        if (xpFill != null) xpFill.color = new Color(0.1f, 0.4f, 1f); // Nice Blue
+        if (xpFill != null) xpFill.color = new Color(0.1f, 0.4f, 1f);
 
-        // Clear stamina trackers to prevent interference
         staminaFill = null;
         staminaText = null;
+
+        playerNav = PlayerReference.GetNavigation();
+        EnsureStepText();
+    }
+
+    private void EnsureStepText()
+    {
+        if (stepText != null) return;
+
+        foreach (var t in GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (t.name == "Text_Step")
+            {
+                stepText = t;
+                return;
+            }
         }
 
-        private void Update()
-        {
+        GameObject go = new GameObject("Text_Step", typeof(RectTransform));
+        go.transform.SetParent(transform, false);
+
+        RectTransform rect = go.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0f);
+        rect.anchorMax = new Vector2(0.5f, 0f);
+        rect.pivot = new Vector2(0.5f, 0f);
+        rect.anchoredPosition = new Vector2(0f, 150f);
+        rect.sizeDelta = new Vector2(920f, 36f);
+
+        stepText = go.AddComponent<TextMeshProUGUI>();
+        stepText.fontSize = 20;
+        stepText.alignment = TextAlignmentOptions.Center;
+        stepText.color = Color.white;
+        stepText.outlineWidth = 0.15f;
+        stepText.outlineColor = Color.black;
+        stepText.text = "Target: - | Roll to move";
+
+        TMP_FontAsset font = Resources.Load<TMP_FontAsset>("Fonts/Alata-Regular SDF");
+        if (font == null) font = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
+        if (font != null) stepText.font = font;
+    }
+
+    private void Update()
+    {
         if (playerStats == null)
         {
             playerStats = PlayerReference.GetStats();
             if (playerStats == null) return;
         }
 
-        // Level
-        if (playerStats.level != lastLevel || !Application.isPlaying)
+        if (playerNav == null)
+            playerNav = PlayerReference.GetNavigation();
+
+        UpdateStepDisplay();
+
+        if (playerStats.level != lastLevel)
         {
             lastLevel = playerStats.level;
             if (levelText != null) levelText.text = lastLevel.ToString();
         }
 
-        // HP Bar (Bottom)
         float currentHP = playerStats.currentHP;
         int maxHP = playerStats.MaxHP;
-        if (Mathf.Abs(currentHP - lastHP) > 0.1f || maxHP != lastMaxHP || !Application.isPlaying)
+        if (Mathf.Abs(currentHP - lastHP) > 0.1f || maxHP != lastMaxHP)
         {
             lastHP = currentHP;
             lastMaxHP = maxHP;
-            if (hpFill != null && maxHP > 0) 
+            if (hpFill != null && maxHP > 0)
             {
                 float pct = Mathf.Clamp01(currentHP / (float)maxHP);
                 hpFill.rectTransform.anchorMin = Vector2.zero;
@@ -126,14 +165,13 @@ public class GameHUDManager : MonoBehaviour
             if (hpText != null) hpText.text = $"{(int)currentHP}/{maxHP}";
         }
 
-        // XP Bar (Top)
         float currentXP = playerStats.currentXP;
         int maxXP = playerStats.MaxXP;
-        if (Mathf.Abs(currentXP - lastXP) > 0.1f || maxXP != lastMaxXP || !Application.isPlaying)
+        if (Mathf.Abs(currentXP - lastXP) > 0.1f || maxXP != lastMaxXP)
         {
             lastXP = currentXP;
             lastMaxXP = maxXP;
-            if (xpFill != null && maxXP > 0) 
+            if (xpFill != null && maxXP > 0)
             {
                 float pct = Mathf.Clamp01(currentXP / (float)maxXP);
                 xpFill.rectTransform.anchorMin = Vector2.zero;
@@ -144,14 +182,13 @@ public class GameHUDManager : MonoBehaviour
             if (xpText != null) xpText.text = $"{(int)currentXP}/{maxXP}";
         }
 
-        // Energy (Mana)
         float currentMana = playerStats.currentMana;
         int maxMana = playerStats.MaxMana;
-        if (Mathf.Abs(currentMana - lastMana) > 0.1f || maxMana != lastMaxMana || !Application.isPlaying)
+        if (Mathf.Abs(currentMana - lastMana) > 0.1f || maxMana != lastMaxMana)
         {
             lastMana = currentMana;
             lastMaxMana = maxMana;
-            if (energyText != null) 
+            if (energyText != null)
             {
                 energyText.text = $"{(int)currentMana} / {maxMana}";
                 energyText.color = Color.white;
@@ -159,22 +196,41 @@ public class GameHUDManager : MonoBehaviour
             if (energyFill != null && maxMana > 0) energyFill.fillAmount = currentMana / (float)maxMana;
         }
 
-        // Coins
-        if (playerStats.coins != lastCoins || !Application.isPlaying)
+        if (playerStats.coins != lastCoins)
         {
             lastCoins = playerStats.coins;
             if (coinText != null) coinText.text = lastCoins.ToString("N0");
         }
+    }
+
+    private void UpdateStepDisplay()
+    {
+        if (stepText == null) return;
+        if (playerNav == null) return;
+
+        string targetPart = playerNav.TargetName != "None"
+            ? $"Target: {playerNav.TargetName} ({playerNav.PathDistanceToTarget:F0}m away)"
+            : "Target: -";
+
+        string rollPart = playerNav.LastDiceTotal > 0
+            ? $" | Roll: {playerNav.LastDiceTotal} ({playerNav.LastRollMeters:F0}m)"
+            : "";
+
+        string leftPart = playerNav.remainingMeters > 0.01f
+            ? $" | Left: {playerNav.remainingMeters:F1}m"
+            : "";
+
+        string currentText = targetPart + rollPart + leftPart;
+        if (currentText != lastStepText)
+        {
+            lastStepText = currentText;
+            stepText.text = currentText;
         }
+    }
 
     private void ShowSteveStats()
     {
-        Debug.Log("[GameHUDManager] ShowSteveStats button clicked!");
-        if (playerStats == null) 
-        {
-            Debug.LogError("[GameHUDManager] playerStats is null!");
-            return;
-        }
+        if (playerStats == null) return;
 
         if (statsConfig != null)
         {
@@ -187,27 +243,23 @@ public class GameHUDManager : MonoBehaviour
         {
             popup.ClearStats();
             EquipmentManager em = EquipmentManager.Instance;
-        
-            // Header
+
             popup.AddStat("<b>NAME</b>", "STEVE");
             popup.AddStat("<b>LEVEL</b>", playerStats.level.ToString());
-            popup.AddStat(" ", " "); // Spacer
-        
-            // Base Stats
+            popup.AddStat(" ", " ");
+
             popup.AddStat("Brawn", playerStats.brawn.ToString() + GetBonusString(em, "Brawn"));
             popup.AddStat("Finesse", playerStats.finesse.ToString() + GetBonusString(em, "Finesse"));
             popup.AddStat("Wit", playerStats.wit.ToString() + GetBonusString(em, "Wit"));
             popup.AddStat("Grit", playerStats.grit.ToString() + GetBonusString(em, "Grit"));
-        
-            // Derived Stats
-            popup.AddStat(" ", " "); // Spacer
+
+            popup.AddStat(" ", " ");
             popup.AddStat("<i>Melee Damage</i>", playerStats.MeleeDamage.ToString());
             popup.AddStat("<i>Ranged Damage</i>", playerStats.RangedDamage.ToString());
             popup.AddStat("<i>Defense</i>", playerStats.Defense.ToString());
             popup.AddStat("<i>Crit Chance</i>", $"{playerStats.CritChance:F1}%");
-        
-            // Current Status
-            popup.AddStat(" ", " "); // Spacer
+
+            popup.AddStat(" ", " ");
             popup.AddStat("HP", $"{(int)playerStats.currentHP} / {playerStats.MaxHP}");
             popup.AddStat("Energy", $"{(int)playerStats.currentMana} / {playerStats.MaxMana}");
             popup.AddStat("XP", $"{(int)playerStats.currentXP} / {playerStats.MaxXP}");

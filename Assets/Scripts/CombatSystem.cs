@@ -38,6 +38,8 @@ public class CombatSystem : MonoBehaviour
         if (Camera.main != null) camFollow = Camera.main.GetComponent<CameraFollow>();
     }
 
+    public string LastCombatAction { get; private set; } = "Prepare for Battle!";
+
     public void StartCombat(CharacterStats enemy)
     {
         if (isInCombat || enemy == null || enemy.isDead || (playerStats != null && playerStats.isDead) || GenericPopup.IsOpen || EquipmentLootPopup.IsOpen) 
@@ -50,6 +52,7 @@ public class CombatSystem : MonoBehaviour
         isInCombat = true;
         isPlayerTurn = true;
         isAttackSequenceRunning = false; 
+        LastCombatAction = $"Combat Started against {enemy.name}";
         Debug.Log("[CombatSystem] Combat Started against " + enemy.name);
 
         var nav = playerStats.GetComponent<HeroNavigation>();
@@ -266,6 +269,8 @@ else
         int finalDamage = isCritical ? baseDamage * 2 : baseDamage;
         currentEnemyStats.TakeDamage(finalDamage);
         
+        LastCombatAction = $"{currentEnemyStats.name} takes {finalDamage} dmg (Roll {rollValue})";
+        
         string damagePrefix = isCritical ? "CRITICAL! -" : "-";
         SpawnDamageText(currentEnemyStats.transform.position + Vector3.up * 2f, $"{damagePrefix}{finalDamage}", isCritical ? Color.yellow : Color.red);
         
@@ -357,6 +362,7 @@ bool isDragon = currentEnemyStats.name.Contains("DragonBob");
             if (isCritical) damage *= 2;
 
             playerStats.TakeDamage(damage);
+            LastCombatAction = $"{currentEnemyStats.name} does {damage} damg";
             SpawnDamageText(playerStats.transform.position + Vector3.up * 2f, $"{(isCritical ? "CRITICAL! -" : "-")}{damage}", Color.red);
         
             if (hitEffectPrefab != null)
@@ -434,6 +440,7 @@ bool isDragon = currentEnemyStats.name.Contains("DragonBob");
 
             if (playerWon)
             {
+                LastCombatAction = "Victory! Steve won the battle.";
                 // Victory cleanup
                 if (camFollow != null)
                 {
@@ -482,6 +489,7 @@ bool isDragon = currentEnemyStats.name.Contains("DragonBob");
             }
             else
             {
+                LastCombatAction = "Defeat... Steve has fallen.";
                 // Failure cleanup (Steve died)
                 StartCoroutine(PlayerDeathSequenceRoutine());
             }
