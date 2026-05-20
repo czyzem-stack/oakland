@@ -41,8 +41,26 @@ public static class AnimatorUtils
         return parameters.Contains(parameterName);
     }
     
+    public static void SafeCrossFade(this Animator animator, string stateName, float duration = 0.2f, int layer = 0)
+    {
+        if (animator == null || string.IsNullOrEmpty(stateName)) return;
+        if (animator.HasState(layer, Animator.StringToHash(stateName)))
+            animator.CrossFade(stateName, duration, layer);
+    }
+
+    public static void ResetToLocomotion(this Animator animator, float duration = 0.2f)
+    {
+        if (animator == null) return;
+        animator.ResetTrigger("Attack");
+        animator.ResetTrigger("GetHit");
+        animator.ResetTrigger("Victory");
+        animator.ResetTrigger("Die");
+        animator.SafeSetFloat("Speed", 0f);
+        animator.SafeCrossFade("Locomotion", duration);
+    }
+
     public static void ClearCache(this Animator animator)
     {
         if (animator != null) parameterCache.Remove(animator.GetEntityId());
     }
-    }
+}

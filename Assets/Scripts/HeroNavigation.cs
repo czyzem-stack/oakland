@@ -7,7 +7,7 @@ using System.Collections;
 [RequireComponent(typeof(Animator))]
 public class HeroNavigation : MonoBehaviour
 {
-    private const int NavSampleMask = NavMesh.AllAreas;
+    private const int NavSampleMask = 1 << 0; // Walkable area only
 
     [Header("Navigation Settings")]
     public Transform poiRoot;
@@ -516,14 +516,7 @@ else if (isMoving)
             stopDist = 2.5f; // Forgiving distance for chests
         agent.stoppingDistance = stopDist;
 
-        if (animator != null)
-        {
-            animator.ResetTrigger("Victory");
-            animator.ResetTrigger("Attack");
-            animator.ResetTrigger("GetHit");
-            animator.CrossFade("Locomotion", 0.2f);
-            animator.SafeSetFloat("Speed", 0f);
-        }
+        if (animator != null) animator.ResetToLocomotion(0.2f);
 
         agent.isStopped = false;
         if (!agent.SetDestination(currentTarget.position))

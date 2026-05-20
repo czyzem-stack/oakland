@@ -278,12 +278,12 @@ public EquipmentItem currentHelmet;
             locomotionGetHit = getHitUnarmed;
         }
 
-        // Apply locomotion overrides
-        overrideController["Idle_Normal_SwordAndShield"] = locomotionIdle;
-        overrideController["MoveFWD_Normal_InPlace_SwordAndShield"] = locomotionWalk;
-        overrideController["SprintFWD_Battle_InPlace_SwordAndShield"] = locomotionRun;
-        
-        // Apply Aux overrides
+        // Only override locomotion when all three blend clips are assigned (partial overrides break the blend tree)
+        bool hasLocomotion = locomotionIdle != null && locomotionWalk != null && locomotionRun != null;
+        overrideController["Idle_Normal_SwordAndShield"] = hasLocomotion ? locomotionIdle : null;
+        overrideController["MoveFWD_Normal_InPlace_SwordAndShield"] = hasLocomotion ? locomotionWalk : null;
+        overrideController["SprintFWD_Battle_InPlace_SwordAndShield"] = hasLocomotion ? locomotionRun : null;
+
         overrideController["Victory_Battle_SwordAndShield"] = locomotionVictory;
         overrideController["Die01_SwordAndShield"] = locomotionDie;
         overrideController["GetHit01_SwordAndShield"] = locomotionGetHit;

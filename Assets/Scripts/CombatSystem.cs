@@ -251,9 +251,10 @@ dirToPlayer.y = 0;
         {
             if (isDragon) eAnim.CrossFade("Scream", 0.2f);
             else if (isWorm) eAnim.CrossFade("GroundBreakThrough", 0.1f);
-            else eAnim.SafeSetTrigger("GetHit");
+            else if (isChest) { /* IdleBattle set above */ }
+            else eAnim.SafeSetFloat("Speed", 0f);
         }
-        if (pAnim != null) pAnim.SafeSetTrigger("GetHit");
+        if (pAnim != null) pAnim.ResetToLocomotion(0.15f);
 
         yield return new WaitForSeconds(isWorm ? 0.8f : 0.15f);
 
@@ -526,11 +527,8 @@ bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
             Animator playerAnim = playerStats.GetComponent<Animator>();
             if (playerAnim != null) 
             {
-                playerAnim.ResetTrigger("Attack");
-                playerAnim.ResetTrigger("GetHit");
-                playerAnim.ResetTrigger("Victory");
                 playerAnim.SafeSetFloat("Speed", 0f);
-                playerAnim.CrossFade("Victory", 0.2f);
+                playerAnim.SafeSetTrigger("Victory");
             }
 
             if (currentEnemyStats != null)
@@ -640,6 +638,8 @@ bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
             }
 
             var heroNav = playerStats.GetComponent<HeroNavigation>();
+            var playerAnim = playerStats.GetComponent<Animator>();
+            if (playerAnim != null) playerAnim.ResetToLocomotion(0.25f);
             if (heroNav != null) heroNav.ResumeAfterCombat(defeatedName);
         }
 

@@ -28,9 +28,11 @@ public class CameraOcclusionFade : MonoBehaviour
         {
             if (hit.transform == target) continue;
 
-            // Ignore ground and bridges
+            // Ignore ground, bridges, rocks, and mountains
             string lowerName = hit.transform.name.ToLower();
-            if (lowerName.Contains("bridge") || lowerName.Contains("floor") || lowerName.Contains("ground") || lowerName.Contains("terrain"))
+            if (lowerName.Contains("bridge") || lowerName.Contains("floor") || lowerName.Contains("ground") || 
+                lowerName.Contains("terrain") || lowerName.Contains("rock") || lowerName.Contains("mountain") ||
+                lowerName.Contains("cliff") || lowerName.Contains("mound"))
                 continue;
 
             Renderer r = hit.transform.GetComponentInChildren<Renderer>();

@@ -332,17 +332,40 @@ List<PointOfInterest> candidatePool = new List<PointOfInterest>();
     private void SnapToSurface(Transform t)
     {
         Vector3 pos = t.position;
-        RaycastHit hit;
-        if (Physics.Raycast(new Vector3(pos.x, 100f, pos.z), Vector3.down, out hit, 200f))
+        
+        // Always check NavMesh first to ensure we are in a playable area
+        NavMeshHit navHit;
+        if (NavMesh.SamplePosition(pos, out navHit, 15f, 1 << 0))
         {
-            t.position = hit.point;
+            // If the NavMesh point is significantly different in height, 
+            // it means the POI was likely placed on a peak or floating.
+            // We use the NavMesh point as the ground truth.
+            t.position = navHit.position;
         }
         else
         {
-            NavMeshHit navHit;
-            if (NavMesh.SamplePosition(pos, out navHit, 50f, NavMesh.AllAreas))
+            // Fallback to Raycast but only if it hits something we expect to be walkable
+            RaycastHit hit;
+            if (Physics.Raycast(new Vector3(pos.x, 100f, pos.z), Vector3.down, out hit, 200f))
             {
-                t.position = navHit.position;
+                // Check if the hit point has NavMesh
+                if (NavMesh.SamplePosition(hit.point, out navHit, 2f, 1 << 0))
+                {
+                    t.position = navHit.position;
+                }
+                else
+                {
+                    // If Raycast hit a peak with no NavMesh, find the nearest walkable spot
+                    if (NavMesh.SamplePosition(hit.point, out navHit, 50f, 1 << 0))
+                    {
+                        t.position = navHit.position;
+                    }
+                    else
+                    {
+                        // Final fallback: just keep original but this POI is likely broken
+                        t.position = hit.point;
+                    }
+                }
             }
         }
     }
@@ -359,8 +382,8 @@ List<PointOfInterest> candidatePool = new List<PointOfInterest>();
             Vector3 candidate = new Vector3(rx, 50f, rz);
             
             NavMeshHit navHit;
-            // Only sample walkable area (Area 0) if possible, or all areas but check normal
-            if (NavMesh.SamplePosition(candidate, out navHit, 100f, NavMesh.AllAreas))
+            // Only sample walkable area (Area 0)
+            if (NavMesh.SamplePosition(candidate, out navHit, 100f, 1 << 0))
             {
                 Vector3 finalPos = navHit.position;
                 
@@ -369,7 +392,7 @@ List<PointOfInterest> candidatePool = new List<PointOfInterest>();
                 if (Physics.Raycast(new Vector3(finalPos.x, finalPos.y + 10f, finalPos.z), Vector3.down, out groundHit, 20f))
                 {
                     float angle = Vector3.Angle(groundHit.normal, Vector3.up);
-                    if (angle > 30f) continue; // Too steep
+                    if (angle > 25f) continue; // Even more restrictive slope for POIs
                     finalPos = groundHit.point;
                 }
                 else
@@ -379,7 +402,7 @@ List<PointOfInterest> candidatePool = new List<PointOfInterest>();
 
                 // 2. Check Reachability (ensure Steve can actually get there)
                 NavMeshPath path = new NavMeshPath();
-                if (NavMesh.CalculatePath(safeReference, finalPos, NavMesh.AllAreas, path))
+                if (NavMesh.CalculatePath(safeReference, finalPos, 1 << 0, path))
                 {
                     if (path.status != NavMeshPathStatus.PathComplete) continue; // Unreachable
                 }
@@ -417,7 +440,7 @@ List<PointOfInterest> candidatePool = new List<PointOfInterest>();
             Vector3 candidate = nearPosition + new Vector3(randomCircle.x, 0, randomCircle.y);
             
             NavMeshHit navHit;
-            if (NavMesh.SamplePosition(candidate, out navHit, 15f, NavMesh.AllAreas))
+            if (NavMesh.SamplePosition(candidate, out navHit, 15f, 1 << 0))
             {
                 // Prefer prefab over potentially dirty scene templates
                 GameObject template = poiBasePrefab != null ? poiBasePrefab : (allPOIs.Count > 0 ? allPOIs[0].gameObject : null);
