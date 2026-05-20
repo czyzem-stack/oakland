@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System;
+using System.Collections.Generic;
 
 public class EquipmentLootPopup : MonoBehaviour
 {
@@ -15,7 +16,7 @@ public class EquipmentLootPopup : MonoBehaviour
     }
 
     [Header("Item 1 UI")]
-public Image item1Icon;
+    public Image item1Icon;
     public TMP_Text item1Title;
     public TMP_Text item1Stats;
     public Button item1Button;
@@ -26,18 +27,35 @@ public Image item1Icon;
     public TMP_Text item2Stats;
     public Button item2Button;
 
+    [Header("Item 3 UI (Dynamic)")]
+    public Image item3Icon;
+    public TMP_Text item3Title;
+    public TMP_Text item3Stats;
+    public Button item3Button;
+    private GameObject item3Root;
+
     [Header("General UI")]
     public TMP_Text headerTitle;
     public Button closeButton;
 
-    private EquipmentItem selectedItem;
-    private Action selectedAction;
     private EquipmentItem item1Data;
     private EquipmentItem item2Data;
+    private EquipmentItem item3Data;
     private Action on1;
     private Action on2;
+    private Action on3;
+    private Action onComplete;
 
-    public static void Show(EquipmentItem item1, EquipmentItem item2, Sprite icon1, Sprite icon2, Action onChoice1, Action onChoice2)
+    private EquipmentItem selectedItem;
+    private Action selectedAction;
+    private int selectedIndex = -1;
+
+    private int maxPicks = 1;
+    private int currentPicks = 0;
+    private List<int> pickedIndices = new List<int>();
+
+    public static void Show(EquipmentItem item1, EquipmentItem item2, Sprite icon1, Sprite icon2, Action onChoice1, Action onChoice2, 
+                          EquipmentItem item3 = null, Sprite icon3 = null, Action onChoice3 = null, int picks = 1, Action onComplete = null)
     {
         GameObject prefab = Resources.Load<GameObject>("UI/EquipmentLootPopup");
         if (prefab == null)
@@ -66,8 +84,7 @@ public Image item1Icon;
 
         GameObject instance = Instantiate(prefab, targetCanvas.transform);
         EquipmentLootPopup popup = instance.GetComponent<EquipmentLootPopup>();
-
-        popup.Setup(item1, item2, icon1, icon2, onChoice1, onChoice2);
+        popup.Setup(item1, item2, icon1, icon2, onChoice1, onChoice2, item3, icon3, onChoice3, picks, onComplete);
     }
 
     private bool countedAsOpen = false;
@@ -86,28 +103,34 @@ public Image item1Icon;
         countedAsOpen = false;
         openCount = Mathf.Max(0, openCount - 1);
         if (openCount == 0 && !GenericPopup.IsOpen) Time.timeScale = 1f;
+        
+        onComplete?.Invoke();
     }
 
-    private void Setup(EquipmentItem item1, EquipmentItem item2, Sprite icon1, Sprite icon2, Action onChoice1, Action onChoice2)
+    public void Setup(EquipmentItem item1, EquipmentItem item2, Sprite icon1, Sprite icon2, Action onChoice1, Action onChoice2, 
+                       EquipmentItem item3, Sprite icon3, Action onChoice3, int picks, Action onCompleteAction)
     {
         item1Data = item1;
         item2Data = item2;
+        item3Data = item3;
         on1 = onChoice1;
         on2 = onChoice2;
+        on3 = onChoice3;
+        onComplete = onCompleteAction;
+        maxPicks = picks;
+        currentPicks = 0;
+        pickedIndices.Clear();
 
-        if (headerTitle != null) headerTitle.text = "CHEST LOOTED";
+        if (headerTitle != null) headerTitle.text = maxPicks > 1 ? $"CHEST LOOTED (PICK {maxPicks})" : "CHEST LOOTED";
 
         if (item1 != null)
         {
             if (item1Title != null) item1Title.text = item1.name;
             if (item1Stats != null) item1Stats.text = GetStatString(item1);
             if (item1Icon != null) item1Icon.sprite = icon1;
-            if (item1Button != null)
-            {
-                item1Button.onClick.RemoveAllListeners();
-                item1Button.onClick.AddListener(() => SelectItem(1));
-                SetButtonText(item1Button, "SELECT");
-            }
+            item1Button.onClick.RemoveAllListeners();
+            item1Button.onClick.AddListener(() => SelectItem(1));
+            SetButtonText(item1Button, "SELECT");
         }
 
         if (item2 != null)
@@ -115,21 +138,35 @@ public Image item1Icon;
             if (item2Title != null) item2Title.text = item2.name;
             if (item2Stats != null) item2Stats.text = GetStatString(item2);
             if (item2Icon != null) item2Icon.sprite = icon2;
-            if (item2Button != null)
+            item2Button.onClick.RemoveAllListeners();
+            item2Button.onClick.AddListener(() => SelectItem(2));
+            SetButtonText(item2Button, "SELECT");
+        }
+
+        if (item3 != null)
+        {
+            EnsureItem3UI();
+            if (item3Title != null) item3Title.text = item3.name;
+            if (item3Stats != null) item3Stats.text = GetStatString(item3);
+            if (item3Icon != null) item3Icon.sprite = icon3;
+            if (item3Button != null)
             {
-                item2Button.onClick.RemoveAllListeners();
-                item2Button.onClick.AddListener(() => SelectItem(2));
-                SetButtonText(item2Button, "SELECT");
+                item3Button.onClick.RemoveAllListeners();
+                item3Button.onClick.AddListener(() => SelectItem(3));
+                SetButtonText(item3Button, "SELECT");
             }
+            if (item3Root != null) item3Root.SetActive(true);
+        }
+        else if (item3Root != null)
+        {
+            item3Root.SetActive(false);
         }
 
         if (closeButton != null)
         {
             closeButton.onClick.RemoveAllListeners();
-            closeButton.onClick.AddListener(() => {
-                if (EquipmentManager.Instance != null) EquipmentManager.Instance.ClearPreview();
-                ClosePopup();
-            });
+            closeButton.onClick.AddListener(ClosePopup);
+            closeButton.gameObject.SetActive(maxPicks == 1);
         }
         
         RectTransform rt = GetComponent<RectTransform>();
@@ -140,84 +177,125 @@ public Image item1Icon;
         }
     }
 
+    private void EnsureItem3UI()
+    {
+        if (item3Button != null && item3Root != null) return;
+
+        Transform splitContent = transform.Find("Container/SplitContent");
+        if (splitContent == null) return;
+
+        Transform item2Transform = splitContent.Find("Item2");
+        if (item2Transform == null) return;
+
+        GameObject item3Go = Instantiate(item2Transform.gameObject, splitContent);
+        item3Go.name = "Item3";
+        item3Root = item3Go;
+
+        item3Icon = item3Go.transform.Find("Icon")?.GetComponent<Image>();
+        item3Title = item3Go.transform.Find("Title")?.GetComponent<TMP_Text>();
+        item3Stats = item3Go.transform.Find("Stats")?.GetComponent<TMP_Text>();
+        item3Button = item3Go.transform.Find("EquipButton")?.GetComponent<Button>();
+
+        HorizontalLayoutGroup hlg = splitContent.GetComponent<HorizontalLayoutGroup>();
+        if (hlg != null)
+        {
+            hlg.childControlWidth = true;
+            hlg.childForceExpandWidth = true;
+        }
+    }
+
     private void SetButtonText(Button btn, string text)
     {
         TMP_Text t = btn.GetComponentInChildren<TMP_Text>();
         if (t != null) t.text = text;
     }
-private void SelectItem(int index)
-{
-    EquipmentItem targetItem = (index == 1) ? item1Data : item2Data;
-    Action targetAction = (index == 1) ? on1 : on2;
 
-    if (EquipmentManager.Instance != null)
+    private void SelectItem(int index)
     {
-        EquipmentManager.Instance.ClearPreview();
+        if (pickedIndices.Contains(index)) return;
+
+        EquipmentItem targetItem = (index == 1) ? item1Data : (index == 2 ? item2Data : item3Data);
+        Action targetAction = (index == 1) ? on1 : (index == 2 ? on2 : on3);
+
+        if (EquipmentManager.Instance != null) EquipmentManager.Instance.ClearPreview();
+
+        if (selectedItem == targetItem)
+        {
+            ConfirmEquip(index, targetAction);
+            return;
+        }
+
+        selectedItem = targetItem;
+        selectedAction = targetAction;
+        selectedIndex = index;
+
+        if (EquipmentManager.Instance != null) EquipmentManager.Instance.Preview(selectedItem);
+
+        RefreshButtonStates(index);
+        
+        if (headerTitle != null) 
+        {
+            string picksPart = maxPicks > 1 ? $" (PICK {currentPicks + 1}/{maxPicks})" : "";
+            headerTitle.text = $"SELECTING: {selectedItem.name.ToUpper()}{picksPart}";
+        }
     }
 
-    // If clicking the same item again, equip it immediately
-    if (selectedItem == targetItem)
+    private void RefreshButtonStates(int currentSelection)
     {
-        Debug.Log($"[EquipmentLootPopup] Confirmed selection of {targetItem.name}.");
-        ConfirmEquip(targetAction);
-        return;
+        UpdateButton(1, item1Button, currentSelection == 1);
+        UpdateButton(2, item2Button, currentSelection == 2);
+        if (item3Button != null) UpdateButton(3, item3Button, currentSelection == 3);
     }
 
-    selectedItem = targetItem;
-    selectedAction = targetAction;
-
-    if (EquipmentManager.Instance != null)
+    private void UpdateButton(int index, Button btn, bool isSelected)
     {
-        EquipmentManager.Instance.Preview(selectedItem);
+        if (btn == null) return;
+        bool isPicked = pickedIndices.Contains(index);
+        btn.image.color = isPicked ? Color.gray : (isSelected ? new Color(0.5f, 1f, 0.5f) : Color.white);
+        SetButtonText(btn, isPicked ? "PICKED" : (isSelected ? "EQUIP" : "SELECT"));
+        btn.interactable = !isPicked;
     }
 
-    // Visual feedback for selection
-    if (item1Button != null)
+    private void ConfirmEquip(int index, Action action)
     {
-        item1Button.GetComponent<UnityEngine.UI.Image>().color = (index == 1) ? new Color(0.5f, 1f, 0.5f) : Color.white;
-        SetButtonText(item1Button, (index == 1) ? "EQUIP" : "SELECT");
+        action?.Invoke();
+        pickedIndices.Add(index);
+        currentPicks++;
+        selectedItem = null;
+        selectedAction = null;
+        selectedIndex = -1;
+
+        if (currentPicks >= maxPicks)
+        {
+            ClosePopup();
+        }
+        else
+        {
+            RefreshButtonStates(-1);
+            if (headerTitle != null) headerTitle.text = $"CHEST LOOTED (PICK {currentPicks + 1}/{maxPicks})";
+        }
     }
-    if (item2Button != null)
+
+    private void ClosePopup()
     {
-        item2Button.GetComponent<UnityEngine.UI.Image>().color = (index == 2) ? new Color(0.5f, 1f, 0.5f) : Color.white;
-        SetButtonText(item2Button, (index == 2) ? "EQUIP" : "SELECT");
+        if (EquipmentManager.Instance != null) EquipmentManager.Instance.ClearPreview();
+        Destroy(gameObject);
     }
-            
-    if (headerTitle != null) headerTitle.text = $"SELECTING: {selectedItem.name.ToUpper()}";
-            
-    Debug.Log($"[EquipmentLootPopup] Selected {selectedItem.name}. Click EQUIP or Steve to confirm!");
-}
-
-private void ConfirmEquip(Action action)
-{
-    Debug.Log("[EquipmentLootPopup] Confirming Equip.");
-    action?.Invoke();
-    ClosePopup();
-}
-
-private void ClosePopup()
-{
-    Destroy(gameObject);
-}
 
     private void Update()
     {
         var pointer = UnityEngine.InputSystem.Pointer.current;
         if (selectedItem != null && pointer != null && pointer.press.wasPressedThisFrame)
         {
-            // Don't raycast if clicking UI
             if (UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()) return;
 
-            // Raycast into world to see if Steve was clicked
             Vector2 screenPos = pointer.position.ReadValue();
             Ray ray = Camera.main.ScreenPointToRay(screenPos);
             if (Physics.Raycast(ray, out RaycastHit hit))
             {
-                EquipmentManager em = hit.transform.GetComponentInParent<EquipmentManager>();
-                if (em != null)
+                if (hit.transform.GetComponentInParent<EquipmentManager>() != null)
                 {
-                    Debug.Log($"[EquipmentLootPopup] Targeted Steve with {selectedItem.name}!");
-                    ConfirmEquip(selectedAction);
+                    ConfirmEquip(selectedIndex, selectedAction);
                 }
             }
         }
@@ -231,13 +309,8 @@ private void ClosePopup()
         if (item.witBonus != 0) s += $"Wit +{item.witBonus}\n";
         if (item.gritBonus != 0) s += $"Grit +{item.gritBonus}\n";
         if (item.attackBonus != 0) s += $"Attack +{item.attackBonus}\n";
-        
-        // Add note for items that don't have separate meshes
         if (item.slot == EquipmentSlot.Gloves || item.slot == EquipmentSlot.Boots)
-        {
             s += "<size=80%><color=#AAAAAA>(Stat Boost Only)</color></size>\n";
-        }
-        
         return s.Trim();
     }
 }

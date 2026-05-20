@@ -7,32 +7,38 @@ public class GameHUDManager : MonoBehaviour
     public CharacterStats playerStats;
 
     [Header("Top Left")]
-    public TMP_Text levelText;
-    public TMP_Text playerNameText;
-    public Image hpFill;
-    public TMP_Text hpText;
-    public Image xpFill;
-    public TMP_Text xpText;
-    public Image staminaFill;
-    public TMP_Text staminaText;
+    [SerializeField] public TMP_Text levelText;
+    [SerializeField] public TMP_Text playerNameText;
+    [SerializeField] public Image hpFill;
+    [SerializeField] public TMP_Text hpText;
+    [SerializeField] public Image xpFill;
+    [SerializeField] public TMP_Text xpText;
+    [SerializeField] public Image staminaFill;
+    [SerializeField] public TMP_Text staminaText;
 
     [Header("Top Bar")]
-    public Image energyFill;
-    public TMP_Text energyText;
-    public TMP_Text gemText;
-    public TMP_Text coinText;
+    [SerializeField] public Image energyFill;
+    [SerializeField] public TMP_Text energyText;
+    [SerializeField] public TMP_Text gemText;
+    [SerializeField] public TMP_Text coinText;
 
     [Header("Bottom Bar")]
-    public Button rollButton;
-    public TMP_Text rollButtonText;
-    public Button heroesButton;
-    public StatDisplayConfig statsConfig;
+    [SerializeField] public Button rollButton;
+    [SerializeField] public TMP_Text rollButtonText;
+    [SerializeField] public Button heroesButton;
+    [SerializeField] public StatDisplayConfig statsConfig;
 
     [Header("Navigation")]
-    public TMP_Text stepText;
+    [SerializeField] public TMP_Text stepText;
 
     private HeroNavigation playerNav;
-    private string lastStepText = "";
+    
+    // Values to track for changes to avoid redundant string creation
+private string lastTargetName = "";
+    private float lastPathDist = -1f;
+    private int lastDiceTotal = -1;
+    private float lastRollMeters = -1f;
+    private float lastRemainingMeters = -1f;
 
     private int lastLevel = -1;
     private float lastXP = -1;
@@ -51,6 +57,7 @@ public class GameHUDManager : MonoBehaviour
         if (rollButtonText != null) rollButtonText.text = "ROLL";
         if (gemText != null) gemText.text = "100";
 
+        // Fallback for missing references
         if (xpFill == null)
         {
             GameObject s = GameObject.Find("Slider");
@@ -85,9 +92,6 @@ public class GameHUDManager : MonoBehaviour
 
         if (hpFill != null) hpFill.color = Color.red;
         if (xpFill != null) xpFill.color = new Color(0.1f, 0.4f, 1f);
-
-        staminaFill = null;
-        staminaText = null;
 
         playerNav = PlayerReference.GetNavigation();
         EnsureStepText();
@@ -205,27 +209,37 @@ public class GameHUDManager : MonoBehaviour
 
     private void UpdateStepDisplay()
     {
-        if (stepText == null) return;
-        if (playerNav == null) return;
+        if (stepText == null || playerNav == null) return;
 
-        string targetPart = playerNav.TargetName != "None"
-            ? $"Target: {playerNav.TargetName} ({playerNav.PathDistanceToTarget:F0}m away)"
-            : "Target: -";
+        // Check if values changed before constructing strings
+        bool changed = playerNav.TargetName != lastTargetName ||
+                       Mathf.Abs(playerNav.PathDistanceToTarget - lastPathDist) > 0.5f ||
+                       playerNav.LastDiceTotal != lastDiceTotal ||
+                       Mathf.Abs(playerNav.LastRollMeters - lastRollMeters) > 0.5f ||
+                       Mathf.Abs(playerNav.remainingMeters - lastRemainingMeters) > 0.1f;
 
-        string rollPart = playerNav.LastDiceTotal > 0
-            ? $" | Roll: {playerNav.LastDiceTotal} ({playerNav.LastRollMeters:F0}m)"
-            : "";
+        if (!changed) return;
 
-        string leftPart = playerNav.remainingMeters > 0.01f
-            ? $" | Left: {playerNav.remainingMeters:F1}m"
-            : "";
+        lastTargetName = playerNav.TargetName;
+        lastPathDist = playerNav.PathDistanceToTarget;
+        lastDiceTotal = playerNav.LastDiceTotal;
+        lastRollMeters = playerNav.LastRollMeters;
+        lastRemainingMeters = playerNav.remainingMeters;
 
-        string currentText = targetPart + rollPart + leftPart;
-        if (currentText != lastStepText)
-        {
-            lastStepText = currentText;
-            stepText.text = currentText;
-        }
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+
+        if (lastTargetName != "None")
+            sb.AppendFormat("Target: {0} ({1:F0}m away)", lastTargetName, lastPathDist);
+        else
+            sb.Append("Target: -");
+
+        if (lastDiceTotal > 0)
+            sb.AppendFormat(" | Roll: {0} ({1:F0}m)", lastDiceTotal, lastRollMeters);
+
+        if (lastRemainingMeters > 0.01f)
+            sb.AppendFormat(" | Left: {0:F1}m", lastRemainingMeters);
+
+        stepText.text = sb.ToString();
     }
 
     private void ShowSteveStats()

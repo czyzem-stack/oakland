@@ -81,6 +81,8 @@ if (dist < engagementRadius)
             }
             else
             {
+                bool isFTUE = FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive;
+                
                 // Ensure existing enemies have their unique behavior components
                 switch (enemyType)
                 {
@@ -90,18 +92,21 @@ if (dist < engagementRadius)
                         if (obstacle == null) 
                         {
                             obstacle = existing.gameObject.AddComponent<UnityEngine.AI.NavMeshObstacle>();
-                            obstacle.carving = true;
                             obstacle.center = new Vector3(0, 0.5f, 0);
                             obstacle.size = new Vector3(1.2f, 1.0f, 1.2f);
                         }
+                        // Disable carving during FTUE to prevent Steve from warping when reaching it
+                        obstacle.carving = !isFTUE;
                         break;
                     case EnemyType.Worm:
                         if (existing.GetComponent<WormEnemy>() == null) existing.gameObject.AddComponent<WormEnemy>();
                         break;
                     case EnemyType.Mushroom:
                         if (existing.GetComponent<MushroomEnemy>() == null) existing.gameObject.AddComponent<MushroomEnemy>();
+                        var mushObstacle = existing.GetComponent<UnityEngine.AI.NavMeshObstacle>();
+                        if (mushObstacle != null) mushObstacle.carving = !isFTUE;
                         break;
-                    case EnemyType.Orc:
+case EnemyType.Orc:
                         if (existing.GetComponent<OrcPatrol>() == null) existing.gameObject.AddComponent<OrcPatrol>();
                         break;
                     case EnemyType.DragonBob:
@@ -170,11 +175,15 @@ if (dist < engagementRadius)
                 obstacle.center = new Vector3(0, 0.5f, 0);
                 obstacle.size = new Vector3(1.2f, 1.0f, 1.2f);
             }
-else // Mushroom
+            else // Mushroom
             {
                 if (enemy.GetComponent<MushroomEnemy>() == null) enemy.AddComponent<MushroomEnemy>();
+                
+                // Ensure no obstacles on mushrooms during FTUE that might cause warping
+                var obstacle = enemy.GetComponent<UnityEngine.AI.NavMeshObstacle>();
+                if (obstacle != null) obstacle.carving = !isFTUE;
             }
-        }
+}
         else if (enemyType == EnemyType.DragonBob)
         {
             if (enemy.GetComponent<DragonBob>() == null) enemy.AddComponent<DragonBob>();

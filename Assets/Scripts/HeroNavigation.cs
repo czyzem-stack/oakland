@@ -44,6 +44,10 @@ public class HeroNavigation : MonoBehaviour
     {
         if (wormPrefab == null) return;
         if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return;
+        
+        // Prevent random worms during the tutorial
+        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive) return;
+
         if (GameSettings.Instance != null && !GameSettings.Instance.AreWormsUnlocked()) return;
 
         if (Random.value < 0.1f)
@@ -170,6 +174,9 @@ public class HeroNavigation : MonoBehaviour
         lastPosition = transform.position;
     }
 
+    private float lastTargetSearchTime = 0f;
+    private const float targetSearchCooldown = 1.0f;
+
     void Update()
     {
         if (agent == null || stats.isDead) return;
@@ -180,6 +187,21 @@ public class HeroNavigation : MonoBehaviour
             currentAnimSpeed = Mathf.MoveTowards(currentAnimSpeed, 0f, Time.deltaTime * 8f);
             if (animator != null) animator.SafeSetFloat("Speed", currentAnimSpeed);
             return;
+        }
+
+        // Auto-resume movement if no popup is open and distance remains
+        if (!isMoving && remainingMeters > 0.1f && !GenericPopup.IsOpen && !EquipmentLootPopup.IsOpen)
+        {
+            if (CombatSystem.Instance == null || !CombatSystem.Instance.isInCombat)
+            {
+                if (currentTarget == null && Time.time > lastTargetSearchTime + targetSearchCooldown)
+                {
+                    lastTargetSearchTime = Time.time;
+                    SelectNextPOI();
+                }
+                
+                if (currentTarget != null) StartMoving();
+            }
         }
 
         // Only attempt recovery warp if we are truly off-mesh and not in combat
@@ -447,20 +469,29 @@ public class HeroNavigation : MonoBehaviour
         remainingMeters = Mathf.Max(0, remainingMeters);
     }
 
-    public void ResumeAfterCombat()
+    public void ResumeAfterCombat(string completedTargetName = null)
     {
         if (stats.isDead) return;
 
-        // Notify FTUE if target was killed in proper combat
-        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
-            FTUEManager.Instance.OnStageCompleted(currentTarget != null ? currentTarget.name : "CombatTarget");
+        // Notify FTUE if a target was completed (usually passed from chests after loot)
+        if (!string.IsNullOrEmpty(completedTargetName) && FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        {
+            FTUEManager.Instance.OnStageCompleted(completedTargetName);
+        }
 
         EnsureComponents();
         TryWarpToNavMesh();
-        if (remainingMeters > 0.1f && currentTarget != null)
-            StartMoving();
+        
+        if (remainingMeters > 0.1f)
+        {
+            if (currentTarget == null) SelectNextPOI();
+            if (currentTarget != null) StartMoving();
+            else StopMoving("Post-Combat Idle (No Target)");
+        }
         else
+        {
             StopMoving("Post-Combat Idle");
+        }
     }
 
     private void OnReachedPOI()
@@ -536,8 +567,8 @@ public class HeroNavigation : MonoBehaviour
             FTUEManager.Instance.OnStageCompleted(enemyStats.name);
 
         if (isChest && CombatSystem.Instance != null)
-            CombatSystem.Instance.ShowChestUpgradePopup();
-        
+            CombatSystem.Instance.ShowChestUpgradePopup(enemyStats.name);
+
         currentTarget = null;
     }
 

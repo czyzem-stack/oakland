@@ -37,13 +37,37 @@ public class POIManager : MonoBehaviour
 
     private void DeactivateAllPOIs()
     {
-        PointOfInterest[] all = Object.FindObjectsByType<PointOfInterest>(FindObjectsInactive.Include);
-        foreach (var poi in all)
+        // 1. Deactivate managed POIs
+        foreach (var poi in allPOIs)
         {
-            // Only deactivate if it's not a forced FTUE object that was just spawned
-            if (!poi.name.Contains("Forced") && !poi.name.Contains("FTUE"))
+            if (poi != null && !poi.name.Contains("Forced") && !poi.name.Contains("FTUE"))
             {
                 poi.gameObject.SetActive(false);
+            }
+        }
+
+        // 2. Scene-wide deactivation sweep for anything containing PointOfInterest or CharacterStats (not Steve)
+        PointOfInterest[] allScenePOIs = Object.FindObjectsByType<PointOfInterest>(FindObjectsInactive.Include);
+        foreach (var p in allScenePOIs)
+        {
+            if (!p.name.Contains("FTUE") && !p.name.Contains("Forced"))
+            {
+                p.gameObject.SetActive(false);
+            }
+        }
+
+        CharacterStats[] allStats = Object.FindObjectsByType<CharacterStats>(FindObjectsInactive.Include);
+        foreach (var s in allStats)
+        {
+            if (s != null && s.name != "Steve" && s.name != "Player" && 
+                !s.name.Contains("FTUE") && !s.name.Contains("Forced"))
+            {
+                s.gameObject.SetActive(false);
+                // Also hide parent if it's a stray container
+                if (s.transform.parent != null && s.transform.parent.name != "POI" && !s.transform.parent.name.Contains("FTUE"))
+                {
+                    s.transform.parent.gameObject.SetActive(false);
+                }
             }
         }
     }
@@ -69,14 +93,31 @@ public class POIManager : MonoBehaviour
 
         if (isFTUE)
         {
-            // Aggressive Cleanup: Forcefully deactivate anything non-FTUE every update
-            if (Time.frameCount % 10 == 0)
+            // Aggressive Cleanup: Forcefully deactivate anything non-FTUE every 30 frames
+            if (Time.frameCount % 30 == 0)
             {
+                // We use allPOIs first as it's faster
                 foreach (var p in allPOIs)
                 {
                     if (p != null && p.gameObject.activeSelf && !p.name.Contains("FTUE") && !p.name.Contains("Forced"))
                     {
                         p.gameObject.SetActive(false);
+                    }
+                }
+                
+                // Broad sweep for ANY character stats that shouldn't be active
+                CharacterStats[] allStats = Object.FindObjectsByType<CharacterStats>(FindObjectsInactive.Include);
+                foreach (var s in allStats)
+                {
+                    if (s != null && s.gameObject.activeSelf && s.name != "Steve" && s.name != "Player" && 
+                        !s.name.Contains("FTUE") && !s.name.Contains("Forced"))
+                    {
+                        s.gameObject.SetActive(false);
+                        // Also deactivate parent if it's a stray container
+                        if (s.transform.parent != null && s.transform.parent.name != "POI" && !s.transform.parent.name.Contains("FTUE"))
+                        {
+                            s.transform.parent.gameObject.SetActive(false);
+                        }
                     }
                 }
             }
@@ -365,18 +406,24 @@ List<PointOfInterest> candidatePool = new List<PointOfInterest>();
             NavMeshHit navHit;
             if (NavMesh.SamplePosition(candidate, out navHit, 15f, NavMesh.AllAreas))
             {
-                GameObject template = allPOIs.Count > 0 ? allPOIs[0].gameObject : poiBasePrefab;
+                // Prefer prefab over potentially dirty scene templates
+                GameObject template = poiBasePrefab != null ? poiBasePrefab : (allPOIs.Count > 0 ? allPOIs[0].gameObject : null);
+                if (template == null) return null;
+
                 GameObject newGo = Instantiate(template, navHit.position, Quaternion.identity, poiRoot);
                 newGo.name = $"FTUE_Forced_{type}_{System.Guid.NewGuid().ToString().Substring(0,4)}";
                 PointOfInterest poi = newGo.GetComponent<PointOfInterest>();
+                
+                // Ensure fresh state
                 poi.enemyType = type;
+                newGo.SetActive(true);
                 poi.EnsureEnemy();
+                
                 allPOIs.Add(poi);
                 CacheStats(poi);
-                newGo.SetActive(true);
                 return poi;
             }
-        }
+}
 return null;
     }
 }

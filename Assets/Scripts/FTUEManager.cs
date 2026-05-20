@@ -1,26 +1,19 @@
 using UnityEngine;
-
-public enum FTUEStage
-{
-    Orc1,
-    Chest1,
-    Orc2,
-    Mushroom,
-    Chest2,
-    Orc3,
-    Worm,
-    Chest3,
-    Completed
-}
+using System.Collections.Generic;
 
 public class FTUEManager : MonoBehaviour
 {
     public static FTUEManager Instance;
 
-    public FTUEStage currentStage = FTUEStage.Orc1;
+    [Header("Tutorial Nodes")]
+    public List<FTUEStep> steps = new List<FTUEStep>();
+    public int currentStepIndex = 0;
+    
     public bool isFTUEActive = true;
 
-    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v8"; 
+    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v12"; 
+
+    public FTUEStep CurrentStep => (steps != null && currentStepIndex < steps.Count) ? steps[currentStepIndex] : null;
 
     void Awake()
     {
@@ -31,18 +24,17 @@ public class FTUEManager : MonoBehaviour
             PlayerPrefs.SetInt(FTUE_COMPLETED_KEY, 0);
             PlayerPrefs.SetInt("ForceResetFTUE", 0);
             PlayerPrefs.Save();
+            Debug.Log("[FTUE] Force reset detected.");
         }
 
         if (PlayerPrefs.GetInt(FTUE_COMPLETED_KEY, 0) == 1)
         {
             isFTUEActive = false;
-            currentStage = FTUEStage.Completed;
         }
 
         if (isFTUEActive)
         {
-            Debug.Log($"[FTUE] Awake - Stage: {currentStage}");
-            SuppressAllScenePOIs();
+            Debug.Log($"[FTUE] Awake - Current Step: {currentStepIndex}");
         }
     }
 
@@ -52,7 +44,7 @@ public class FTUEManager : MonoBehaviour
         {
              SuppressAllScenePOIs();
              // Reset Steve to campfire if we just started
-             if (currentStage == FTUEStage.Orc1)
+             if (currentStepIndex == 0)
              {
                  GameObject steve = GameObject.Find("Steve") ?? GameObject.Find("Player");
                  if (steve != null) steve.transform.position = new Vector3(33.1f, 0f, -0.7f);
@@ -62,57 +54,98 @@ public class FTUEManager : MonoBehaviour
 
     public void SuppressAllScenePOIs()
     {
-        PointOfInterest[] all = Object.FindObjectsByType<PointOfInterest>(FindObjectsInactive.Include);
-        int deactivated = 0;
-        foreach (var poi in all)
+        PointOfInterest[] allPOIs = Object.FindObjectsByType<PointOfInterest>(FindObjectsInactive.Include);
+        foreach (var poi in allPOIs)
         {
-            if (poi.gameObject.activeSelf && !poi.name.Contains("FTUE") && !poi.name.Contains("Forced"))
+            if (poi.gameObject.activeSelf && !poi.name.Contains("FTUE") && !poi.name.Contains("Forced") && !IsPartOfCurrentStep(poi))
             {
                 poi.gameObject.SetActive(false);
-                deactivated++;
             }
         }
-        if (deactivated > 0) Debug.Log($"[FTUE] Suppressed {deactivated} stray POIs.");
+
+        CharacterStats[] allStats = Object.FindObjectsByType<CharacterStats>(FindObjectsInactive.Include);
+        foreach (var stats in allStats)
+        {
+            if (stats != null && stats.name != "Steve" && stats.name != "Player" && 
+                !stats.name.Contains("FTUE") && !stats.name.Contains("Forced") && !IsStatsOfCurrentStep(stats))
+            {
+                if (stats.gameObject.activeSelf) stats.gameObject.SetActive(false);
+                
+                Transform parent = stats.transform.parent;
+                if (parent != null && parent.gameObject.activeSelf && !parent.name.Contains("FTUE") && !parent.name.Contains("Forced") && parent.name != "POI" && !IsParentOfCurrentStep(parent))
+                {
+                    parent.gameObject.SetActive(false);
+                }
+            }
+        }
     }
+
+    private bool IsPartOfCurrentStep(PointOfInterest poi)
+    {
+        FTUEStep current = CurrentStep;
+        if (current == null) return false;
+        if (poi == current.targetPOI) return true;
+        if (current.pathEnemies != null && current.pathEnemies.Contains(poi)) return true;
+        return false;
+    }
+
+    private bool IsStatsOfCurrentStep(CharacterStats stats) => IsPartOfCurrentStep(stats.GetComponentInParent<PointOfInterest>());
+    private bool IsParentOfCurrentStep(Transform parent) => IsPartOfCurrentStep(parent.GetComponent<PointOfInterest>());
 
     public void OnStageCompleted(string targetName)
     {
         if (!isFTUEActive) return;
 
-        // ONLY advance if the target was an FTUE target
-        if (!targetName.Contains("FTUE") && !targetName.Contains("Forced"))
+        FTUEStep current = CurrentStep;
+        if (current == null) return;
+
+        // Robust matching: allow "Chest" to match any TreasureChest target, 
+        // or check if targetName contains the POI name.
+        bool isChestCompletion = targetName.Contains("Chest") || targetName == "Chest";
+        bool stepIsChest = current.targetPOI != null && current.targetPOI.enemyType == EnemyType.TreasureChest;
+        
+        bool isMatch = false;
+        if (current.targetPOI != null && targetName.Contains(current.targetPOI.name)) isMatch = true;
+        else if (isChestCompletion && stepIsChest) isMatch = true;
+        else if (current.pathEnemies != null)
         {
-            Debug.LogWarning($"[FTUE] Engagement with non-FTUE target {targetName} ignored for progression.");
+            foreach (var p in current.pathEnemies)
+            {
+                if (p != null && targetName.Contains(p.name)) { isMatch = true; break; }
+            }
+        }
+
+        if (!isMatch)
+        {
+            Debug.LogWarning($"[FTUE] Target {targetName} completed but does not match Current Step {currentStepIndex} ({current.gameObject.name}). Ignoring.");
             return;
         }
 
-        FTUEStage next = currentStage;
-        switch (currentStage)
-        {
-            case FTUEStage.Orc1: next = FTUEStage.Chest1; break;
-            case FTUEStage.Chest1: next = FTUEStage.Orc2; break;
-            case FTUEStage.Orc2: next = FTUEStage.Mushroom; break;
-            case FTUEStage.Mushroom: next = FTUEStage.Chest2; break;
-            case FTUEStage.Chest2: next = FTUEStage.Orc3; break;
-            case FTUEStage.Orc3: next = FTUEStage.Worm; break;
-            case FTUEStage.Worm: next = FTUEStage.Chest3; break;
-            case FTUEStage.Chest3: 
-                next = FTUEStage.Completed; 
-                isFTUEActive = false;
-                PlayerPrefs.SetInt(FTUE_COMPLETED_KEY, 1);
-                PlayerPrefs.Save();
-                if (POIManager.Instance != null) POIManager.Instance.SetupPOIs();
-                break;
-        }
-        
-        currentStage = next;
-        Debug.Log($"[FTUE] Advanced to {currentStage} after defeating {targetName}");
+        Debug.Log($"[FTUE] Step {currentStepIndex} COMPLETED by {targetName}. Reward: {current.rewardType}");
 
-        // First fight level up bonus
-        if (currentStage == FTUEStage.Chest1)
+        if (current.levelUpOnComplete)
         {
              var stats = CombatSystem.Instance?.playerStats;
-             if (stats != null && stats.level == 1) stats.AddXP(stats.MaxXP);
+             if (stats != null)
+             {
+                 stats.AddXP(stats.MaxXP);
+                 Debug.Log("[FTUE] Level Up granted for step completion.");
+             }
+        }
+
+        currentStepIndex++;
+        if (currentStepIndex >= steps.Count)
+        {
+            isFTUEActive = false;
+            PlayerPrefs.SetInt(FTUE_COMPLETED_KEY, 1);
+            PlayerPrefs.Save();
+            Debug.Log("[FTUE] All steps completed! Tutorial finished.");
+            if (POIManager.Instance != null) POIManager.Instance.SetupPOIs();
+        }
+        else
+        {
+            Debug.Log($"[FTUE] Advancing to Step {currentStepIndex}: {CurrentStep.gameObject.name}");
+            SuppressAllScenePOIs(); 
         }
     }
 
@@ -120,31 +153,27 @@ public class FTUEManager : MonoBehaviour
     {
         if (!isFTUEActive) return null;
 
-        EnemyType typeToSpawn = EnemyType.Orc;
-        switch (currentStage)
+        FTUEStep current = CurrentStep;
+        if (current != null && current.targetPOI != null)
         {
-            case FTUEStage.Orc1: typeToSpawn = EnemyType.Orc; break;
-            case FTUEStage.Chest1: typeToSpawn = EnemyType.TreasureChest; break;
-            case FTUEStage.Orc2: typeToSpawn = EnemyType.Orc; break;
-            case FTUEStage.Mushroom: typeToSpawn = EnemyType.Mushroom; break;
-            case FTUEStage.Chest2: typeToSpawn = EnemyType.TreasureChest; break;
-            case FTUEStage.Orc3: typeToSpawn = EnemyType.Orc; break;
-            case FTUEStage.Worm: typeToSpawn = EnemyType.Worm; break;
-            case FTUEStage.Chest3: typeToSpawn = EnemyType.TreasureChest; break;
-            default: return null;
+            current.targetPOI.gameObject.SetActive(true);
+            current.targetPOI.EnsureEnemy();
+            
+            if (current.pathEnemies != null)
+            {
+                foreach (var p in current.pathEnemies)
+                {
+                    if (p != null)
+                    {
+                        p.gameObject.SetActive(true);
+                        p.EnsureEnemy();
+                    }
+                }
+            }
+
+            return current.targetPOI.transform;
         }
 
-        Vector3 center = Vector3.zero;
-        Vector3 directionToCenter = (center - playerPos).normalized;
-        Vector3 targetBasePos = playerPos + directionToCenter * 15f;
-
-        // generous range
-        PointOfInterest poi = POIManager.Instance.ForceSpawnPOI(typeToSpawn, targetBasePos, 5f, 15f);
-        if (poi != null)
-        {
-            poi.gameObject.name = $"FTUE_{currentStage}_{typeToSpawn}";
-            return poi.transform;
-        }
         return null;
     }
 }
@@ -163,3 +192,4 @@ public class PlayerStart : MonoBehaviour
         Gizmos.DrawLine(transform.position, transform.position + transform.forward * 2f);
     }
 }
+

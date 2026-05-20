@@ -15,7 +15,11 @@ public class CombatSystem : MonoBehaviour
 
     [Header("Juice Prefabs")]
     public GameObject hitEffectPrefab;
-    private TMP_FontAsset damageFont;
+    [SerializeField] private TMP_FontAsset damageFont;
+    [SerializeField] private int initialPoolSize = 20;
+
+    private List<FloatingCombatText> pool = new List<FloatingCombatText>();
+    private static Canvas worldCombatTextCanvas;
 
     private void Awake()
     {
@@ -26,13 +30,80 @@ public class CombatSystem : MonoBehaviour
         currentEnemyStats = null;
 
         // Try to find a default TMP font
-damageFont = Resources.Load<TMP_FontAsset>("Fonts/Alata-Regular SDF");
-        if (damageFont == null) damageFont = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
+        if (damageFont == null)
+        {
+            damageFont = Resources.Load<TMP_FontAsset>("Fonts/Alata-Regular SDF");
+            if (damageFont == null) damageFont = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
+        }
         
         if (hitEffectPrefab == null)
         {
             hitEffectPrefab = UnityEngine.Resources.Load<GameObject>("FX_Blood_Splatter_01");
         }
+
+        InitializePool();
+    }
+
+    private void InitializePool()
+    {
+        if (worldCombatTextCanvas == null)
+        {
+            GameObject canvasGo = new GameObject("WorldCombatTextCanvas");
+            worldCombatTextCanvas = canvasGo.AddComponent<Canvas>();
+            worldCombatTextCanvas.renderMode = RenderMode.WorldSpace;
+            canvasGo.transform.localScale = Vector3.one * 0.0075f;
+        }
+
+        for (int i = 0; i < initialPoolSize; i++)
+        {
+            CreateNewPoolItem();
+        }
+    }
+
+    private FloatingCombatText CreateNewPoolItem()
+    {
+        GameObject textGo = new GameObject("CombatText", typeof(RectTransform), typeof(TextMeshProUGUI));
+        textGo.transform.SetParent(worldCombatTextCanvas.transform, false);
+        textGo.SetActive(false);
+
+        TextMeshProUGUI t = textGo.GetComponent<TextMeshProUGUI>();
+        t.font = damageFont;
+        t.fontSize = 60;
+        t.alignment = TextAlignmentOptions.Center;
+        t.textWrappingMode = TextWrappingModes.NoWrap;
+        t.outlineWidth = 0.2f;
+        t.outlineColor = Color.black;
+
+        textGo.AddComponent<FaceCamera>();
+        FloatingCombatText fct = textGo.AddComponent<FloatingCombatText>();
+        fct.text = t;
+        fct.driftSpeed = 2.0f;
+        fct.OnComplete = ReturnToPool;
+
+        pool.Add(fct);
+        return fct;
+    }
+
+    private void ReturnToPool(FloatingCombatText item)
+    {
+        item.gameObject.SetActive(false);
+    }
+
+    private FloatingCombatText GetFromPool()
+    {
+        foreach (var item in pool)
+        {
+            if (item != null && !item.gameObject.activeInHierarchy)
+            {
+                item.gameObject.SetActive(true);
+                return item;
+            }
+        }
+        
+        // Expand pool if needed
+        var newItem = CreateNewPoolItem();
+        newItem.gameObject.SetActive(true);
+        return newItem;
     }
 
     private Transform combatCameraAnchor;
@@ -52,6 +123,9 @@ damageFont = Resources.Load<TMP_FontAsset>("Fonts/Alata-Regular SDF");
             if (isInCombat) Debug.LogWarning($"[CombatSystem] Cannot start combat. Already in combat.");
             return;
         }
+
+        // Check if transition is already running (safety net)
+        if (isAttackSequenceRunning) return;
 
         currentEnemyStats = enemy;
         isInCombat = true;
@@ -116,17 +190,19 @@ damageFont = Resources.Load<TMP_FontAsset>("Fonts/Alata-Regular SDF");
         {
             if (combatCameraAnchor == null) combatCameraAnchor = new GameObject("CombatCameraAnchor").transform;
             
-            // Start camera moving toward midpoint immediately
-            Vector3 camPos = (pStart + eStart) * 0.5f;
-            camPos.y = pStart.y;
-            combatCameraAnchor.position = camPos;
+            // Smoother Camera Transition: Don't snap the anchor if it's too far
+            Vector3 camTargetMid = (pStart + eStart) * 0.5f;
+            camTargetMid.y = pStart.y;
+            
+            if (Vector3.Distance(combatCameraAnchor.position, camTargetMid) > 10f)
+                combatCameraAnchor.position = camTargetMid;
             
             camFollow.target = combatCameraAnchor;
             camFollow.isCombatOrbiting = true;
         }
 
-        float duration = isChest ? 1.0f : 0.45f; // slightly longer for chests to feel smoother
-float elapsed = 0;
+        float duration = isChest ? 1.0f : 0.45f; 
+        float elapsed = 0;
 
         // If we are already close, don't force a 'jump'
         if (Vector3.Distance(pStart, playerTarget) < 0.5f) duration = 0.2f;
@@ -137,6 +213,9 @@ float elapsed = 0;
             float t = elapsed / duration;
             // Buttery smooth cubic curve
             float curve = t * t * (3 - 2 * t); 
+
+            // Safety check in case object is destroyed during transition
+            if (playerStats == null || enemy == null) yield break;
 
             playerStats.transform.position = Vector3.Lerp(pStart, playerTarget, curve);
             
@@ -171,9 +250,9 @@ float elapsed = 0;
             yield return null;
         }
 
-        playerStats.transform.position = playerTarget;
-        if (!isWorm) enemy.transform.position = enemyTarget; 
-        
+        if (playerStats != null) playerStats.transform.position = playerTarget;
+        if (enemy != null && !isWorm) enemy.transform.position = enemyTarget; 
+
         if (pAnim != null) pAnim.SafeSetFloat("Speed", 0f);
         if (eAnim != null)
         {
@@ -396,37 +475,12 @@ else
         isPlayerTurn = true;
     }
 
-        private static Canvas worldCombatTextCanvas;
-
         public static void SpawnText(Vector3 position, string text, Color color)
         {
-            if (worldCombatTextCanvas == null)
-            {
-                GameObject canvasGo = new GameObject("WorldCombatTextCanvas");
-                worldCombatTextCanvas = canvasGo.AddComponent<Canvas>();
-                worldCombatTextCanvas.renderMode = RenderMode.WorldSpace;
-                canvasGo.transform.localScale = Vector3.one * 0.0075f;
-            }
-
-            GameObject textGo = new GameObject("CombatText", typeof(RectTransform), typeof(TextMeshProUGUI));
-            textGo.transform.SetParent(worldCombatTextCanvas.transform, false);
-            textGo.transform.position = position + Vector3.up * 0.5f;
-
-            TextMeshProUGUI t = textGo.GetComponent<TextMeshProUGUI>();
-            t.font = Resources.Load<TMP_FontAsset>("Alata-Regular SDF");
-            if (t.font == null) t.font = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
-            t.fontSize = 60; 
-            t.alignment = TextAlignmentOptions.Center;
-            t.textWrappingMode = TextWrappingModes.NoWrap;
-            t.outlineWidth = 0.2f;
-            t.outlineColor = Color.black;
-            t.text = text;
-            t.color = color;
-
-            textGo.AddComponent<FaceCamera>();
-            FloatingCombatText fct = textGo.AddComponent<FloatingCombatText>();
-            fct.text = t;
-            fct.driftSpeed = 2.0f;
+            if (Instance == null) return;
+            
+            FloatingCombatText fct = Instance.GetFromPool();
+            fct.transform.position = position + Vector3.up * 0.5f;
             fct.Setup(text, color);
         }
 
@@ -487,18 +541,19 @@ else
                     else if (isDragon) playerStats.AddGold(Random.Range(100, 201));
                     else playerStats.AddGold(Random.Range(5, 11));
 
+                    string defeatedName = currentEnemyStats.name;
                     GameObject.Destroy(currentEnemyStats.gameObject, isDragon ? 3.0f : 1.5f);
                     currentEnemyStats = null;
 
                     if (isChest)
-                        ShowChestUpgradePopup();
+                        ShowChestUpgradePopup(defeatedName);
                     else
                     {
                         var nav = playerStats.GetComponent<HeroNavigation>();
-                        if (nav != null) nav.ResumeAfterCombat();
+                        if (nav != null) nav.ResumeAfterCombat(defeatedName);
                     }
-                }
-            }
+}
+}
             else
             {
                 LastCombatAction = "Defeat... Steve has fallen.";
@@ -525,8 +580,9 @@ else
         }
 
         private int chestsOpenedThisRun = 0;
+        private string lastChestName = "Chest";
 
-        public void ShowChestUpgradePopup()
+        public void ShowChestUpgradePopup(string chestName)
         {
             EquipmentManager em = EquipmentManager.Instance;
             if (em == null)
@@ -535,83 +591,96 @@ else
                 return;
             }
 
+            // Capture chest name for FTUE progression
+            lastChestName = chestName;
+
             chestsOpenedThisRun++;
-            
+
             // Check FTUE for specific rewards
             var ftue = FTUEManager.Instance;
-            if (ftue == null) ftue = Object.FindAnyObjectByType<FTUEManager>();
+            if (ftue == null) ftue = UnityEngine.Object.FindAnyObjectByType<FTUEManager>();
             
             bool isFTUE = ftue != null && ftue.isFTUEActive;
-            FTUEStage currentStage = isFTUE ? ftue.currentStage : FTUEStage.Completed;
-
-            Debug.Log($"[CombatSystem] Opening Chest. isFTUE: {isFTUE}, currentStage: {currentStage}");
+            FTUERewardType rewardType = FTUERewardType.None;
+            if (isFTUE && ftue.CurrentStep != null)
+            {
+                rewardType = ftue.CurrentStep.rewardType;
+                Debug.Log($"[CombatSystem] FTUE Active. Step: {ftue.currentStepIndex} ({ftue.CurrentStep.name}), RewardType: {rewardType}");
+            }
 
             EquipmentItem item1 = null;
             Sprite icon1 = null;
             EquipmentItem item2 = null;
             Sprite icon2 = null;
+            EquipmentItem item3 = null;
+            Sprite icon3 = null;
+            int picks = 1;
 
-            if (isFTUE && currentStage == FTUEStage.Chest1)
+            if (isFTUE && rewardType != FTUERewardType.None)
             {
-                Debug.Log("[CombatSystem] FTUE Reward: Chest 1 (Stick or Random)");
-                // Chest 1: Stick or Random Weapon
-                // Option 1: Basic Stick
-                item1 = new EquipmentItem { name = "Wooden Stick", slot = EquipmentSlot.Weapon, attackBonus = 1 };
-                icon1 = (em.weaponIcons != null && em.weaponIcons.Length > 7) ? em.weaponIcons[7] : null;
-
-                // Option 2: Random Weapon (excluding Stick)
-                int weaponRoll = UnityEngine.Random.Range(0, 7); // 0-6
-                string[] names = { "Hunting Bow", "Iron Spear", "Iron Sword 03", "War Axe 10", "War Hammer 11", "Iron Greatsword 01", "Magic Wand 01" };
-                int[] bonuses = { 2, 3, 3, 4, 4, 5, 3 };
-
-                item2 = new EquipmentItem { name = names[weaponRoll], slot = EquipmentSlot.Weapon, attackBonus = bonuses[weaponRoll] };
-                if (names[weaponRoll] == "Magic Wand 01") item2.witBonus = 2;
-                icon2 = (em.weaponIcons != null && em.weaponIcons.Length > weaponRoll) ? em.weaponIcons[weaponRoll] : null;
-            }
-else if (isFTUE && currentStage == FTUEStage.Chest2)
-            {
-                Debug.Log("[CombatSystem] FTUE Reward: Chest 2 (Armor Choice)");
-                // Chest 2: Armor choices
-                string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
-                int[] gritBonuses = { 1, 2, 2, 3, 3 };
-                int[] brawnBonuses = { 0, 0, 1, 0, 2 };
-
-                int idx1 = UnityEngine.Random.Range(0, 3); // Light armor
-                int idx2 = UnityEngine.Random.Range(3, 5); // Heavy armor
-
-                item1 = new EquipmentItem { name = armorNames[idx1], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[idx1], brawnBonus = brawnBonuses[idx1] };
-                icon1 = (em.chestIcons != null && em.chestIcons.Length > idx1) ? em.chestIcons[idx1] : null;
-
-                item2 = new EquipmentItem { name = armorNames[idx2], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[idx2], brawnBonus = brawnBonuses[idx2] };
-                icon2 = (em.chestIcons != null && em.chestIcons.Length > idx2) ? em.chestIcons[idx2] : null;
-            }
-            else if (isFTUE && currentStage == FTUEStage.Chest3)
-            {
-                Debug.Log("[CombatSystem] FTUE Reward: Chest 3 (Shield or Helm/Cape)");
-                // Chest 3: Shield or Helmet/Cape
-                // Option 1: Shield
-                int shieldIdx = UnityEngine.Random.Range(0, 4);
-                string[] shieldNames = { "Log", "Iron Shield", "Steel Shield", "Magic Shield" };
-                item1 = new EquipmentItem { name = shieldNames[shieldIdx], slot = EquipmentSlot.Shield, gritBonus = shieldIdx + 1, brawnBonus = shieldIdx / 2 };
-                icon1 = (em.shieldIcons != null && em.shieldIcons.Length > shieldIdx) ? em.shieldIcons[shieldIdx] : null;
-
-                // Option 2: Helmet or Cape
-                if (UnityEngine.Random.value < 0.5f)
+                if (rewardType == FTUERewardType.T1_Weapon)
                 {
-                    int idx = UnityEngine.Random.Range(0, 5);
-                    string[] names = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
-                    item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Helmet, witBonus = 1 + (idx / 2), gritBonus = idx / 2 };
-                    icon2 = (em.helmetIcons != null && em.helmetIcons.Length > idx) ? em.helmetIcons[idx] : null;
+                    // Chest 1: Wooden Stick or Random Weapon
+                    item1 = new EquipmentItem { name = "Wooden Stick", slot = EquipmentSlot.Weapon, attackBonus = 1 };
+                    icon1 = (em.weaponIcons != null && em.weaponIcons.Length > 7) ? em.weaponIcons[7] : null;
+
+                    int weaponRoll = UnityEngine.Random.Range(0, 7); 
+                    string[] names = { "Hunting Bow", "Iron Spear", "Iron Sword 03", "War Axe 10", "War Hammer 11", "Iron Greatsword 01", "Magic Wand 01" };
+                    int[] bonuses = { 2, 3, 3, 4, 4, 5, 3 };
+
+                    item2 = new EquipmentItem { name = names[weaponRoll], slot = EquipmentSlot.Weapon, attackBonus = bonuses[weaponRoll] };
+                    if (names[weaponRoll] == "Magic Wand 01") item2.witBonus = 2;
+                    icon2 = (em.weaponIcons != null && em.weaponIcons.Length > weaponRoll) ? em.weaponIcons[weaponRoll] : null;
                 }
-                else
+                else if (rewardType == FTUERewardType.T2_Armor)
                 {
-                    int capeIdx = UnityEngine.Random.Range(0, 3);
-                    string[] capeNames = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
-                    item2 = new EquipmentItem { name = capeNames[capeIdx], slot = EquipmentSlot.Cloak, witBonus = capeIdx + 1, gritBonus = capeIdx + 1 };
-                    icon2 = (em.cloakIcons != null && em.cloakIcons.Length > capeIdx) ? em.cloakIcons[capeIdx] : null;
+                    // Chest 2: Armor choices
+                    string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
+                    int[] gritBonuses = { 1, 2, 2, 3, 3 };
+                    int[] brawnBonuses = { 0, 0, 1, 0, 2 };
+
+                    int idx1 = UnityEngine.Random.Range(0, 3); 
+                    int idx2 = UnityEngine.Random.Range(3, 5); 
+
+                    item1 = new EquipmentItem { name = armorNames[idx1], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[idx1], brawnBonus = brawnBonuses[idx1] };
+                    icon1 = (em.chestIcons != null && em.chestIcons.Length > idx1) ? em.chestIcons[idx1] : null;
+
+                    item2 = new EquipmentItem { name = armorNames[idx2], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[idx2], brawnBonus = brawnBonuses[idx2] };
+                    icon2 = (em.chestIcons != null && em.chestIcons.Length > idx2) ? em.chestIcons[idx2] : null;
                 }
-            }
-else
+                else if (rewardType == FTUERewardType.T3_Mixed)
+                {
+                    // Chest 3: Shield or (Helm or Cape) - Pick 1
+                    Debug.Log("[CombatSystem] Processing FTUE Reward: T3 Mixed (Shield or Random Helm/Cape)");
+                    
+                    // Choice 1: Shield
+                    int shieldIdx = UnityEngine.Random.Range(0, 4);
+                    string[] shieldNames = { "Log", "Iron Shield", "Steel Shield", "Magic Shield" };
+                    item1 = new EquipmentItem { name = shieldNames[shieldIdx], slot = EquipmentSlot.Shield, gritBonus = shieldIdx + 1, brawnBonus = shieldIdx / 2 };
+                    icon1 = (em.shieldIcons != null && em.shieldIcons.Length > shieldIdx) ? em.shieldIcons[shieldIdx] : null;
+
+                    // Choice 2: Random Helm or Cape
+                    if (UnityEngine.Random.value < 0.5f)
+                    {
+                        // Helmet
+                        int helmIdx = UnityEngine.Random.Range(0, 5);
+                        string[] helmNames = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
+                        item2 = new EquipmentItem { name = helmNames[helmIdx], slot = EquipmentSlot.Helmet, witBonus = 1 + (helmIdx / 2), gritBonus = helmIdx / 2 };
+                        icon2 = (em.helmetIcons != null && em.helmetIcons.Length > helmIdx) ? em.helmetIcons[helmIdx] : null;
+                    }
+                    else
+                    {
+                        // Cape
+                        int capeIdx = UnityEngine.Random.Range(0, 3);
+                        string[] capeNames = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
+                        item2 = new EquipmentItem { name = capeNames[capeIdx], slot = EquipmentSlot.Cloak, witBonus = capeIdx + 1, gritBonus = capeIdx + 1 };
+                        icon2 = (em.cloakIcons != null && em.cloakIcons.Length > capeIdx) ? em.cloakIcons[capeIdx] : null;
+                    }
+                    
+                    picks = 1;
+                }
+}
+            else
             {
                 // Default random behavior
                 if (UnityEngine.Random.value < 0.5f)
@@ -676,15 +745,19 @@ else
                 item2, 
                 icon1, 
                 icon2, 
-                () => { em.Equip(item1); ResumeAfterChest(); }, 
-                () => { em.Equip(item2); ResumeAfterChest(); }
+                () => { em.Equip(item1); }, 
+                () => { em.Equip(item2); },
+                item3, icon3,
+                () => { em.Equip(item3); },
+                picks,
+                ResumeAfterChest
             );
         }
 
         private void ResumeAfterChest()
         {
             var nav = playerStats.GetComponent<HeroNavigation>();
-            if (nav != null) nav.ResumeAfterCombat();
+            if (nav != null) nav.ResumeAfterCombat(lastChestName);
         }
 
         private void ApplyChestUpgrade(string statName)

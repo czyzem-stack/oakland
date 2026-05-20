@@ -9,6 +9,8 @@ public class FloatingCombatText : MonoBehaviour
     public Vector3 driftDirection = Vector3.up;
     public float driftSpeed = 1f;
 
+    public System.Action<FloatingCombatText> OnComplete;
+
     public void Setup(string content, Color color)
     {
         if (text != null)
@@ -16,6 +18,8 @@ public class FloatingCombatText : MonoBehaviour
             text.text = content;
             text.color = color;
         }
+        
+        StopAllCoroutines();
         StartCoroutine(FadeRoutine());
     }
 
@@ -26,6 +30,8 @@ public class FloatingCombatText : MonoBehaviour
         
         CanvasGroup group = GetComponent<CanvasGroup>();
         if (group == null) group = gameObject.AddComponent<CanvasGroup>();
+
+        group.alpha = 1f;
 
         while (elapsed < duration)
         {
@@ -39,6 +45,14 @@ public class FloatingCombatText : MonoBehaviour
             
             yield return null;
         }
-        Destroy(gameObject);
+        
+        if (OnComplete != null)
+        {
+            OnComplete.Invoke(this);
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
     }
 }
