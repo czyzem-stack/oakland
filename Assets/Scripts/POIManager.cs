@@ -31,6 +31,21 @@ public class POIManager : MonoBehaviour
     void Awake()
     {
         Instance = this;
+        // Aggressive cleanup on awake to prevent stray enemies from previous runs or scene artifacts
+        DeactivateAllPOIs();
+    }
+
+    private void DeactivateAllPOIs()
+    {
+        PointOfInterest[] all = Object.FindObjectsByType<PointOfInterest>(FindObjectsInactive.Include);
+        foreach (var poi in all)
+        {
+            // Only deactivate if it's not a forced FTUE object that was just spawned
+            if (!poi.name.Contains("Forced") && !poi.name.Contains("FTUE"))
+            {
+                poi.gameObject.SetActive(false);
+            }
+        }
     }
 
     void Start()
@@ -88,8 +103,8 @@ public class POIManager : MonoBehaviour
             SpawnToDensity();
         }
 
-        // Deactivate all
-        foreach (var poi in allPOIs) poi.gameObject.SetActive(false);
+        // Deactivate everything in the scene
+        DeactivateAllPOIs();
         
         // Only maintain active count if FTUE is NOT active
         if (FTUEManager.Instance == null || !FTUEManager.Instance.isFTUEActive)
@@ -241,22 +256,45 @@ public class POIManager : MonoBehaviour
     private bool TryFindSpawnPosition(List<Vector3> existing, out Vector3 position)
     {
         position = Vector3.zero;
-        for (int attempts = 0; attempts < 100; attempts++)
+        Vector3 safeReference = new Vector3(33.1f, 0f, -0.7f); // Campfire area
+
+        for (int attempts = 0; attempts < 200; attempts++)
         {
             float rx = Random.Range(minX, maxX);
             float rz = Random.Range(minZ, maxZ);
             Vector3 candidate = new Vector3(rx, 50f, rz);
             
             NavMeshHit navHit;
+            // Only sample walkable area (Area 0) if possible, or all areas but check normal
             if (NavMesh.SamplePosition(candidate, out navHit, 100f, NavMesh.AllAreas))
             {
                 Vector3 finalPos = navHit.position;
+                
+                // 1. Check for steep slopes
                 RaycastHit groundHit;
                 if (Physics.Raycast(new Vector3(finalPos.x, finalPos.y + 10f, finalPos.z), Vector3.down, out groundHit, 20f))
                 {
+                    float angle = Vector3.Angle(groundHit.normal, Vector3.up);
+                    if (angle > 30f) continue; // Too steep
                     finalPos = groundHit.point;
                 }
+                else
+                {
+                    continue; // No ground found directly below NavMesh point? Skip.
+                }
 
+                // 2. Check Reachability (ensure Steve can actually get there)
+                NavMeshPath path = new NavMeshPath();
+                if (NavMesh.CalculatePath(safeReference, finalPos, NavMesh.AllAreas, path))
+                {
+                    if (path.status != NavMeshPathStatus.PathComplete) continue; // Unreachable
+                }
+                else
+                {
+                    continue;
+                }
+
+                // 3. Distance check
                 bool tooClose = false;
                 foreach (var p in existing)
                 {

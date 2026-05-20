@@ -64,6 +64,13 @@ public class OrcPatrol : MonoBehaviour
         // Throttle distance checks
         if (Time.frameCount % 4 != 0) return;
 
+        // During FTUE, only allow engagement if this is a forced FTUE object
+        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        {
+            if (parentPOI == null || (!parentPOI.name.Contains("Forced") && !parentPOI.name.Contains("FTUE")))
+                return;
+        }
+
         // Check for Player (Steve) engagement
 if (!isFleeing && !isPatrolling && CombatSystem.Instance != null && !CombatSystem.Instance.isInCombat)
         {

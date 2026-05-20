@@ -66,6 +66,9 @@ public class AutoRollButton : MonoBehaviour, IPointerDownHandler, IPointerUpHand
                 ToggleAutoRoll();
             }
         }
+
+        // Keep visuals in sync with the actual dice system state
+        UpdateVisuals();
     }
 
     private void ToggleAutoRoll()

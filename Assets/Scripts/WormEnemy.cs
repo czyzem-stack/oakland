@@ -45,8 +45,16 @@ public class WormEnemy : MonoBehaviour
         // Throttle checks
         if (Time.frameCount % 6 != 0) return;
 
+        // During FTUE, only allow engagement if this is a forced FTUE object
+        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        {
+            PointOfInterest parentPOI = GetComponentInParent<PointOfInterest>();
+            if (parentPOI == null || (!parentPOI.name.Contains("Forced") && !parentPOI.name.Contains("FTUE")))
+                return;
+        }
+
         // If global combat is active and we are the target, the combat system handles animations.
-        bool inCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat;
+bool inCombat = CombatSystem.Instance != null && CombatSystem.Instance.isInCombat;
 if (inCombat && CombatSystem.Instance.currentEnemyStats == stats)
         {
             isSurfaced = true; // Assume surfaced if in combat

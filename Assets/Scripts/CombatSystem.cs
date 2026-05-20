@@ -258,8 +258,15 @@ else
             }
 
             int baseDamage = rollValue + playerStats.MeleeDamage;
+
+            // Stage FTUE: Steve deals double damage to finish tutorial fights faster
+            if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+            {
+                baseDamage *= 2;
+            }
+
             int finalDamage = isCritical ? baseDamage * 2 : baseDamage;
-            
+
             Debug.Log($"[CombatSystem] Player attacking {currentEnemyStats.name}. Roll: {rollValue}, BaseAtk: {playerStats.MeleeDamage}, Total: {finalDamage}");
             
             currentEnemyStats.TakeDamage(finalDamage);
@@ -524,50 +531,22 @@ else
             }
 
             chestsOpenedThisRun++;
-            bool isFirstChest = chestsOpenedThisRun == 1;
+            
+            // Check FTUE for specific rewards
+            bool isFTUE = FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive;
+            FTUEStage currentStage = isFTUE ? FTUEManager.Instance.currentStage : FTUEStage.Completed;
 
-            // Option 1: Primary (Always a Weapon or a Chest Armor)
-            EquipmentItem item1;
-            Sprite icon1;
-        
-            if (isFirstChest)
+            EquipmentItem item1 = null;
+            Sprite icon1 = null;
+            EquipmentItem item2 = null;
+            Sprite icon2 = null;
+
+            if (isFTUE && currentStage == FTUEStage.Chest1)
             {
+                // Chest 1: Weapons (as before)
                 item1 = new EquipmentItem { name = "Iron Sword 03", slot = EquipmentSlot.Weapon, attackBonus = 3 };
                 icon1 = em.weaponIcons.Length > 2 ? em.weaponIcons[2] : null;
-            }
-            else if (UnityEngine.Random.value < 0.5f)
-            {
-                // Pick a Weapon
-                int weaponRoll = UnityEngine.Random.Range(0, 8);
-                string[] names = { "Hunting Bow", "Iron Spear", "Iron Sword 03", "War Axe 10", "War Hammer 11", "Iron Greatsword 01", "Magic Wand 01", "Stronger Stick" };
-                int[] bonuses = { 2, 3, 3, 4, 4, 5, 3, 2 };
-                item1 = new EquipmentItem { name = names[weaponRoll], slot = EquipmentSlot.Weapon, attackBonus = bonuses[weaponRoll] };
-                if (names[weaponRoll] == "Magic Wand 01") item1.witBonus = 2;
-                icon1 = em.weaponIcons.Length > weaponRoll ? em.weaponIcons[weaponRoll] : null;
-            }
-            else
-            {
-                // Pick a Chest Armor
-                int armorIndex = UnityEngine.Random.Range(0, 5);
-                string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
-                int[] gritBonuses = { 1, 2, 2, 3, 3 };
-                int[] brawnBonuses = { 0, 0, 1, 0, 2 };
 
-                item1 = new EquipmentItem {
-                    name = armorNames[armorIndex],
-                    slot = EquipmentSlot.Chest,
-                    gritBonus = gritBonuses[armorIndex],
-                    brawnBonus = brawnBonuses[armorIndex]
-                };
-                icon1 = em.chestIcons.Length > armorIndex ? em.chestIcons[armorIndex] : null;
-            }
-
-            // Option 2: Secondary (Helmet, Cloak, Gloves, Boots, or Shield)
-            EquipmentItem item2;
-            Sprite icon2;
-        
-            if (isFirstChest)
-            {
                 int weaponRoll = UnityEngine.Random.Range(0, 8);
                 string[] names = { "Hunting Bow", "Iron Spear", "Iron Sword 03", "War Axe 10", "War Hammer 11", "Iron Greatsword 01", "Magic Wand 01", "Stronger Stick" };
                 int[] bonuses = { 2, 3, 3, 4, 4, 5, 3, 2 };
@@ -577,8 +556,71 @@ else
                 if (names[weaponRoll] == "Magic Wand 01") item2.witBonus = 2;
                 icon2 = em.weaponIcons.Length > weaponRoll ? em.weaponIcons[weaponRoll] : null;
             }
-            else
+            else if (isFTUE && currentStage == FTUEStage.Chest2)
             {
+                // Chest 2: Armor choices
+                string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
+                int[] gritBonuses = { 1, 2, 2, 3, 3 };
+                int[] brawnBonuses = { 0, 0, 1, 0, 2 };
+
+                int idx1 = UnityEngine.Random.Range(0, 3); // Light armor
+                int idx2 = UnityEngine.Random.Range(3, 5); // Heavy armor
+
+                item1 = new EquipmentItem { name = armorNames[idx1], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[idx1], brawnBonus = brawnBonuses[idx1] };
+                icon1 = em.chestIcons.Length > idx1 ? em.chestIcons[idx1] : null;
+
+                item2 = new EquipmentItem { name = armorNames[idx2], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[idx2], brawnBonus = brawnBonuses[idx2] };
+                icon2 = em.chestIcons.Length > idx2 ? em.chestIcons[idx2] : null;
+            }
+            else if (isFTUE && currentStage == FTUEStage.Chest3)
+            {
+                // Chest 3: Shield or Helmet/Cape
+                // Option 1: Shield
+                int shieldIdx = UnityEngine.Random.Range(0, 4);
+                string[] shieldNames = { "Log", "Iron Shield", "Steel Shield", "Magic Shield" };
+                item1 = new EquipmentItem { name = shieldNames[shieldIdx], slot = EquipmentSlot.Shield, gritBonus = shieldIdx + 1, brawnBonus = shieldIdx / 2 };
+                icon1 = (em.shieldIcons != null && em.shieldIcons.Length > shieldIdx) ? em.shieldIcons[shieldIdx] : null;
+
+                // Option 2: Helmet or Cape
+                if (UnityEngine.Random.value < 0.5f)
+                {
+                    // Helmet
+                    int idx = UnityEngine.Random.Range(0, 5);
+                    string[] names = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
+                    item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Helmet, witBonus = 1 + (idx / 2), gritBonus = idx / 2 };
+                    icon2 = em.helmetIcons.Length > idx ? em.helmetIcons[idx] : null;
+                }
+                else
+                {
+                    // Cape
+                    int capeIdx = UnityEngine.Random.Range(0, 3);
+                    string[] capeNames = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
+                    item2 = new EquipmentItem { name = capeNames[capeIdx], slot = EquipmentSlot.Cloak, witBonus = capeIdx + 1, gritBonus = capeIdx + 1 };
+                    icon2 = em.cloakIcons.Length > capeIdx ? em.cloakIcons[capeIdx] : null;
+                }
+            }
+else
+            {
+                // Default random behavior
+                if (UnityEngine.Random.value < 0.5f)
+                {
+                    int weaponRoll = UnityEngine.Random.Range(0, 8);
+                    string[] names = { "Hunting Bow", "Iron Spear", "Iron Sword 03", "War Axe 10", "War Hammer 11", "Iron Greatsword 01", "Magic Wand 01", "Stronger Stick" };
+                    int[] bonuses = { 2, 3, 3, 4, 4, 5, 3, 2 };
+                    item1 = new EquipmentItem { name = names[weaponRoll], slot = EquipmentSlot.Weapon, attackBonus = bonuses[weaponRoll] };
+                    if (names[weaponRoll] == "Magic Wand 01") item1.witBonus = 2;
+                    icon1 = em.weaponIcons.Length > weaponRoll ? em.weaponIcons[weaponRoll] : null;
+                }
+                else
+                {
+                    int armorIndex = UnityEngine.Random.Range(0, 5);
+                    string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
+                    int[] gritBonuses = { 1, 2, 2, 3, 3 };
+                    int[] brawnBonuses = { 0, 0, 1, 0, 2 };
+                    item1 = new EquipmentItem { name = armorNames[armorIndex], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[armorIndex], brawnBonus = brawnBonuses[armorIndex] };
+                    icon1 = em.chestIcons.Length > armorIndex ? em.chestIcons[armorIndex] : null;
+                }
+
                 float roll = UnityEngine.Random.value;
                 if (roll < 0.2f)
                 {
@@ -610,7 +652,6 @@ else
                 }
                 else
                 {
-                    // Shield Slot (including Log)
                     int idx = UnityEngine.Random.Range(0, 4);
                     string[] names = { "Log", "Iron Shield", "Steel Shield", "Magic Shield" };
                     item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Shield, gritBonus = idx + 1, brawnBonus = idx / 2 };

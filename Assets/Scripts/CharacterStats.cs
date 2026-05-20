@@ -219,6 +219,19 @@ public int wit = 10;
         currentHP = MaxHP;
         currentMana = MaxMana;
         currentStamina = MaxStamina;
+
+        // Assign layers for silhouette effect and occlusion
+        int layer = GetComponent<EquipmentManager>() != null ? 7 : 8;
+        SetLayerRecursive(gameObject, layer);
+    }
+
+    private void SetLayerRecursive(GameObject obj, int layer)
+    {
+        obj.layer = layer;
+        foreach (Transform child in obj.transform)
+        {
+            SetLayerRecursive(child.gameObject, layer);
+        }
     }
 
     private void LoadPermStats()
@@ -241,6 +254,15 @@ public int wit = 10;
     {
         if (isDead) return;
 
+        bool isPlayer = GetComponent<EquipmentManager>() != null;
+        bool isFTUE = (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive);
+
+        // Stage FTUE: Steve takes 90% less damage during the tutorial
+        if (isPlayer && isFTUE)
+        {
+            amount *= 0.1f;
+        }
+
         // Apply defense reduction
         float reducedAmount = Mathf.Max(1, amount - Defense);
         
@@ -249,8 +271,11 @@ public int wit = 10;
         currentStamina = Mathf.Max(0, currentStamina - reducedAmount);
         currentHP -= reducedAmount;
         
-        // FTUE Plot Armor: Steve cannot die during the tutorial sequence
-        if (currentHP <= 0 && FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive && GetComponent<EquipmentManager>() != null)
+        // Second Wind / FTUE Plot Armor: Only trigger if the manual setting is ON
+        HeroSettings settings = GetComponent<HeroSettings>();
+        bool secondWindEnabled = settings != null && settings.secondWind;
+
+        if (currentHP <= 0 && secondWindEnabled && isPlayer)
         {
             currentHP = 1;
             CombatSystem.Instance?.SpawnDamageText(transform.position + Vector3.up * 2.5f, "SECOND WIND!", Color.green);

@@ -2,14 +2,14 @@ using UnityEngine;
 
 public enum FTUEStage
 {
-    InitialFight,
-    FirstChest,
-    MushroomFight,
-    OrcFight,
-    ChestAfterOrc,
-    WormFight,
-    OrcFightFinal,
-    LastChest,
+    Orc1,
+    Chest1,
+    Mushroom,
+    Orc2,
+    Chest2,
+    Worm,
+    Orc3,
+    Chest3,
     Completed
 }
 
@@ -17,10 +17,10 @@ public class FTUEManager : MonoBehaviour
 {
     public static FTUEManager Instance;
 
-    public FTUEStage currentStage = FTUEStage.InitialFight;
+    public FTUEStage currentStage = FTUEStage.Orc1;
     public bool isFTUEActive = true;
 
-    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v3"; 
+    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v4"; 
 
     void Awake()
     {
@@ -38,22 +38,24 @@ public class FTUEManager : MonoBehaviour
 
         switch (currentStage)
         {
-            case FTUEStage.InitialFight: 
+            case FTUEStage.Orc1: 
                 var stats = CombatSystem.Instance?.playerStats;
                 if (stats != null && stats.level == 1) stats.AddXP(stats.MaxXP);
-                currentStage = FTUEStage.FirstChest; 
+                currentStage = FTUEStage.Chest1; 
                 break;
-            case FTUEStage.FirstChest: currentStage = FTUEStage.MushroomFight; break;
-            case FTUEStage.MushroomFight: currentStage = FTUEStage.OrcFight; break;
-            case FTUEStage.OrcFight: currentStage = FTUEStage.ChestAfterOrc; break;
-            case FTUEStage.ChestAfterOrc: currentStage = FTUEStage.WormFight; break;
-            case FTUEStage.WormFight: currentStage = FTUEStage.OrcFightFinal; break;
-            case FTUEStage.OrcFightFinal: currentStage = FTUEStage.LastChest; break;
-            case FTUEStage.LastChest: 
+            case FTUEStage.Chest1: currentStage = FTUEStage.Orc2; break;
+            case FTUEStage.Orc2: currentStage = FTUEStage.Mushroom; break;
+            case FTUEStage.Mushroom: currentStage = FTUEStage.Chest2; break;
+            case FTUEStage.Chest2: currentStage = FTUEStage.Orc3; break;
+            case FTUEStage.Orc3: currentStage = FTUEStage.Worm; break;
+            case FTUEStage.Worm: currentStage = FTUEStage.Chest3; break;
+            case FTUEStage.Chest3: 
                 currentStage = FTUEStage.Completed; 
                 isFTUEActive = false;
                 PlayerPrefs.SetInt(FTUE_COMPLETED_KEY, 1);
                 PlayerPrefs.Save();
+                // Enable global POIs
+                if (POIManager.Instance != null) POIManager.Instance.SetupPOIs();
                 break;
         }
         
@@ -67,14 +69,14 @@ public class FTUEManager : MonoBehaviour
         EnemyType typeToSpawn = EnemyType.Orc;
         switch (currentStage)
         {
-            case FTUEStage.InitialFight: typeToSpawn = EnemyType.Orc; break;
-            case FTUEStage.FirstChest: typeToSpawn = EnemyType.TreasureChest; break;
-            case FTUEStage.MushroomFight: typeToSpawn = EnemyType.Mushroom; break;
-            case FTUEStage.OrcFight: typeToSpawn = EnemyType.Orc; break;
-            case FTUEStage.ChestAfterOrc: typeToSpawn = EnemyType.TreasureChest; break;
-            case FTUEStage.WormFight: typeToSpawn = EnemyType.Worm; break;
-            case FTUEStage.OrcFightFinal: typeToSpawn = EnemyType.Orc; break;
-            case FTUEStage.LastChest: typeToSpawn = EnemyType.TreasureChest; break;
+            case FTUEStage.Orc1: typeToSpawn = EnemyType.Orc; break;
+            case FTUEStage.Chest1: typeToSpawn = EnemyType.TreasureChest; break;
+            case FTUEStage.Orc2: typeToSpawn = EnemyType.Orc; break;
+            case FTUEStage.Mushroom: typeToSpawn = EnemyType.Mushroom; break;
+            case FTUEStage.Chest2: typeToSpawn = EnemyType.TreasureChest; break;
+            case FTUEStage.Orc3: typeToSpawn = EnemyType.Orc; break;
+            case FTUEStage.Worm: typeToSpawn = EnemyType.Worm; break;
+            case FTUEStage.Chest3: typeToSpawn = EnemyType.TreasureChest; break;
             default: return null;
         }
 
@@ -85,14 +87,11 @@ public class FTUEManager : MonoBehaviour
         PointOfInterest poi = POIManager.Instance.ForceSpawnPOI(typeToSpawn, targetBasePos, 0f, 5f);
         if (poi != null)
         {
-            if (currentStage == FTUEStage.ChestAfterOrc)
-            {
-                poi.gameObject.name = "FTUE_Second_Chest_POI";
-            }
+            poi.gameObject.name = $"FTUE_{currentStage}_{typeToSpawn}";
             return poi.transform;
         }
         return null;
-}
+    }
 }
 
 public class PlayerStart : MonoBehaviour
