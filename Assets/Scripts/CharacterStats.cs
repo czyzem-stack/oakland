@@ -255,10 +255,13 @@ public int wit = 10;
         if (isDead) return;
 
         bool isPlayer = GetComponent<EquipmentManager>() != null;
-        bool isFTUE = (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive);
+        
+        var ftue = FTUEManager.Instance;
+        if (ftue == null) ftue = Object.FindAnyObjectByType<FTUEManager>();
+        bool isFTUE = (ftue != null && ftue.isFTUEActive);
 
         // Apply defense reduction
-        float reducedAmount = Mathf.Max(1, amount - Defense);
+float reducedAmount = Mathf.Max(1, amount - Defense);
         
         Debug.Log($"[CharacterStats] {name} taking damage. Amount: {amount}, Defense: {Defense}, Reduced: {reducedAmount}, HP: {currentHP} -> {currentHP - reducedAmount}");
 

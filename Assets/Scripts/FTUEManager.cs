@@ -20,12 +20,19 @@ public class FTUEManager : MonoBehaviour
     public FTUEStage currentStage = FTUEStage.Orc1;
     public bool isFTUEActive = true;
 
-    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v5"; 
+    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v8"; 
 
     void Awake()
     {
         Instance = this;
-        // Use a unique key for the current structure to force a reset for the user
+        // Check for force reset
+        if (PlayerPrefs.GetInt("ForceResetFTUE", 0) == 1)
+        {
+            PlayerPrefs.SetInt(FTUE_COMPLETED_KEY, 0);
+            PlayerPrefs.SetInt("ForceResetFTUE", 0);
+            PlayerPrefs.Save();
+        }
+
         if (PlayerPrefs.GetInt(FTUE_COMPLETED_KEY, 0) == 1)
         {
             isFTUEActive = false;
@@ -34,42 +41,55 @@ public class FTUEManager : MonoBehaviour
 
         if (isFTUEActive)
         {
-            Debug.Log("[FTUE] Active. Starting Stage: " + currentStage);
-            // Suppress all existing POIs in the scene immediately
+            Debug.Log($"[FTUE] Awake - Stage: {currentStage}");
             SuppressAllScenePOIs();
-        }
-    }
-
-    private void SuppressAllScenePOIs()
-    {
-        PointOfInterest[] all = Object.FindObjectsByType<PointOfInterest>(FindObjectsInactive.Include);
-        foreach (var poi in all)
-        {
-            // If it doesn't have our tutorial prefix, kill it
-            if (!poi.name.Contains("FTUE") && !poi.name.Contains("Forced"))
-            {
-                poi.gameObject.SetActive(false);
-            }
         }
     }
 
     private void Start()
     {
-        if (isFTUEActive) SuppressAllScenePOIs();
+        if (isFTUEActive)
+        {
+             SuppressAllScenePOIs();
+             // Reset Steve to campfire if we just started
+             if (currentStage == FTUEStage.Orc1)
+             {
+                 GameObject steve = GameObject.Find("Steve") ?? GameObject.Find("Player");
+                 if (steve != null) steve.transform.position = new Vector3(33.1f, 0f, -0.7f);
+             }
+        }
     }
 
-    public void OnStageCompleted()
+    public void SuppressAllScenePOIs()
+    {
+        PointOfInterest[] all = Object.FindObjectsByType<PointOfInterest>(FindObjectsInactive.Include);
+        int deactivated = 0;
+        foreach (var poi in all)
+        {
+            if (poi.gameObject.activeSelf && !poi.name.Contains("FTUE") && !poi.name.Contains("Forced"))
+            {
+                poi.gameObject.SetActive(false);
+                deactivated++;
+            }
+        }
+        if (deactivated > 0) Debug.Log($"[FTUE] Suppressed {deactivated} stray POIs.");
+    }
+
+    public void OnStageCompleted(string targetName)
     {
         if (!isFTUEActive) return;
+
+        // ONLY advance if the target was an FTUE target
+        if (!targetName.Contains("FTUE") && !targetName.Contains("Forced"))
+        {
+            Debug.LogWarning($"[FTUE] Engagement with non-FTUE target {targetName} ignored for progression.");
+            return;
+        }
 
         FTUEStage next = currentStage;
         switch (currentStage)
         {
-            case FTUEStage.Orc1: 
-                var stats = CombatSystem.Instance?.playerStats;
-                if (stats != null && stats.level == 1) stats.AddXP(stats.MaxXP);
-                next = FTUEStage.Chest1; 
-                break;
+            case FTUEStage.Orc1: next = FTUEStage.Chest1; break;
             case FTUEStage.Chest1: next = FTUEStage.Orc2; break;
             case FTUEStage.Orc2: next = FTUEStage.Mushroom; break;
             case FTUEStage.Mushroom: next = FTUEStage.Chest2; break;
@@ -86,7 +106,14 @@ public class FTUEManager : MonoBehaviour
         }
         
         currentStage = next;
-        Debug.Log($"[FTUE] Advanced to {currentStage}");
+        Debug.Log($"[FTUE] Advanced to {currentStage} after defeating {targetName}");
+
+        // First fight level up bonus
+        if (currentStage == FTUEStage.Chest1)
+        {
+             var stats = CombatSystem.Instance?.playerStats;
+             if (stats != null && stats.level == 1) stats.AddXP(stats.MaxXP);
+        }
     }
 
     public Transform GetNextTarget(Vector3 playerPos)
@@ -111,7 +138,8 @@ public class FTUEManager : MonoBehaviour
         Vector3 directionToCenter = (center - playerPos).normalized;
         Vector3 targetBasePos = playerPos + directionToCenter * 15f;
 
-        PointOfInterest poi = POIManager.Instance.ForceSpawnPOI(typeToSpawn, targetBasePos, 0f, 5f);
+        // generous range
+        PointOfInterest poi = POIManager.Instance.ForceSpawnPOI(typeToSpawn, targetBasePos, 5f, 15f);
         if (poi != null)
         {
             poi.gameObject.name = $"FTUE_{currentStage}_{typeToSpawn}";
@@ -125,7 +153,6 @@ public class PlayerStart : MonoBehaviour
 {
     void Awake()
     {
-        // Tag this object so we can find it
         gameObject.name = "PlayerSpawnPoint";
     }
 

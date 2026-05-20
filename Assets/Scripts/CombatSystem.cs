@@ -125,8 +125,8 @@ damageFont = Resources.Load<TMP_FontAsset>("Fonts/Alata-Regular SDF");
             camFollow.isCombatOrbiting = true;
         }
 
-        float duration = isChest ? 0.8f : 0.45f; // snappier yet smooth
-        float elapsed = 0;
+        float duration = isChest ? 1.0f : 0.45f; // slightly longer for chests to feel smoother
+float elapsed = 0;
 
         // If we are already close, don't force a 'jump'
         if (Vector3.Distance(pStart, playerTarget) < 0.5f) duration = 0.2f;
@@ -538,8 +538,13 @@ else
             chestsOpenedThisRun++;
             
             // Check FTUE for specific rewards
-            bool isFTUE = FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive;
-            FTUEStage currentStage = isFTUE ? FTUEManager.Instance.currentStage : FTUEStage.Completed;
+            var ftue = FTUEManager.Instance;
+            if (ftue == null) ftue = Object.FindAnyObjectByType<FTUEManager>();
+            
+            bool isFTUE = ftue != null && ftue.isFTUEActive;
+            FTUEStage currentStage = isFTUE ? ftue.currentStage : FTUEStage.Completed;
+
+            Debug.Log($"[CombatSystem] Opening Chest. isFTUE: {isFTUE}, currentStage: {currentStage}");
 
             EquipmentItem item1 = null;
             Sprite icon1 = null;
@@ -548,21 +553,24 @@ else
 
             if (isFTUE && currentStage == FTUEStage.Chest1)
             {
-                // Chest 1: Weapons (as before)
-                item1 = new EquipmentItem { name = "Iron Sword 03", slot = EquipmentSlot.Weapon, attackBonus = 3 };
-                icon1 = em.weaponIcons.Length > 2 ? em.weaponIcons[2] : null;
+                Debug.Log("[CombatSystem] FTUE Reward: Chest 1 (Stick or Random)");
+                // Chest 1: Stick or Random Weapon
+                // Option 1: Basic Stick
+                item1 = new EquipmentItem { name = "Wooden Stick", slot = EquipmentSlot.Weapon, attackBonus = 1 };
+                icon1 = (em.weaponIcons != null && em.weaponIcons.Length > 7) ? em.weaponIcons[7] : null;
 
-                int weaponRoll = UnityEngine.Random.Range(0, 8);
-                string[] names = { "Hunting Bow", "Iron Spear", "Iron Sword 03", "War Axe 10", "War Hammer 11", "Iron Greatsword 01", "Magic Wand 01", "Stronger Stick" };
-                int[] bonuses = { 2, 3, 3, 4, 4, 5, 3, 2 };
-                if (names[weaponRoll] == "Iron Sword 03") weaponRoll = (weaponRoll + 1) % names.Length;
+                // Option 2: Random Weapon (excluding Stick)
+                int weaponRoll = UnityEngine.Random.Range(0, 7); // 0-6
+                string[] names = { "Hunting Bow", "Iron Spear", "Iron Sword 03", "War Axe 10", "War Hammer 11", "Iron Greatsword 01", "Magic Wand 01" };
+                int[] bonuses = { 2, 3, 3, 4, 4, 5, 3 };
 
                 item2 = new EquipmentItem { name = names[weaponRoll], slot = EquipmentSlot.Weapon, attackBonus = bonuses[weaponRoll] };
                 if (names[weaponRoll] == "Magic Wand 01") item2.witBonus = 2;
-                icon2 = em.weaponIcons.Length > weaponRoll ? em.weaponIcons[weaponRoll] : null;
+                icon2 = (em.weaponIcons != null && em.weaponIcons.Length > weaponRoll) ? em.weaponIcons[weaponRoll] : null;
             }
-            else if (isFTUE && currentStage == FTUEStage.Chest2)
+else if (isFTUE && currentStage == FTUEStage.Chest2)
             {
+                Debug.Log("[CombatSystem] FTUE Reward: Chest 2 (Armor Choice)");
                 // Chest 2: Armor choices
                 string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
                 int[] gritBonuses = { 1, 2, 2, 3, 3 };
@@ -572,13 +580,14 @@ else
                 int idx2 = UnityEngine.Random.Range(3, 5); // Heavy armor
 
                 item1 = new EquipmentItem { name = armorNames[idx1], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[idx1], brawnBonus = brawnBonuses[idx1] };
-                icon1 = em.chestIcons.Length > idx1 ? em.chestIcons[idx1] : null;
+                icon1 = (em.chestIcons != null && em.chestIcons.Length > idx1) ? em.chestIcons[idx1] : null;
 
                 item2 = new EquipmentItem { name = armorNames[idx2], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[idx2], brawnBonus = brawnBonuses[idx2] };
-                icon2 = em.chestIcons.Length > idx2 ? em.chestIcons[idx2] : null;
+                icon2 = (em.chestIcons != null && em.chestIcons.Length > idx2) ? em.chestIcons[idx2] : null;
             }
             else if (isFTUE && currentStage == FTUEStage.Chest3)
             {
+                Debug.Log("[CombatSystem] FTUE Reward: Chest 3 (Shield or Helm/Cape)");
                 // Chest 3: Shield or Helmet/Cape
                 // Option 1: Shield
                 int shieldIdx = UnityEngine.Random.Range(0, 4);
@@ -589,19 +598,17 @@ else
                 // Option 2: Helmet or Cape
                 if (UnityEngine.Random.value < 0.5f)
                 {
-                    // Helmet
                     int idx = UnityEngine.Random.Range(0, 5);
                     string[] names = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
                     item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Helmet, witBonus = 1 + (idx / 2), gritBonus = idx / 2 };
-                    icon2 = em.helmetIcons.Length > idx ? em.helmetIcons[idx] : null;
+                    icon2 = (em.helmetIcons != null && em.helmetIcons.Length > idx) ? em.helmetIcons[idx] : null;
                 }
                 else
                 {
-                    // Cape
                     int capeIdx = UnityEngine.Random.Range(0, 3);
                     string[] capeNames = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
                     item2 = new EquipmentItem { name = capeNames[capeIdx], slot = EquipmentSlot.Cloak, witBonus = capeIdx + 1, gritBonus = capeIdx + 1 };
-                    icon2 = em.cloakIcons.Length > capeIdx ? em.cloakIcons[capeIdx] : null;
+                    icon2 = (em.cloakIcons != null && em.cloakIcons.Length > capeIdx) ? em.cloakIcons[capeIdx] : null;
                 }
             }
 else

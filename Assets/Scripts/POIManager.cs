@@ -62,9 +62,24 @@ public class POIManager : MonoBehaviour
 
     void Update()
     {
-        // Don't maintain random POIs during FTUE
-        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        var ftue = FTUEManager.Instance;
+        if (ftue == null) ftue = Object.FindAnyObjectByType<FTUEManager>();
+        
+        bool isFTUE = ftue != null && ftue.isFTUEActive;
+
+        if (isFTUE)
         {
+            // Aggressive Cleanup: Forcefully deactivate anything non-FTUE every update
+            if (Time.frameCount % 10 == 0)
+            {
+                foreach (var p in allPOIs)
+                {
+                    if (p != null && p.gameObject.activeSelf && !p.name.Contains("FTUE") && !p.name.Contains("Forced"))
+                    {
+                        p.gameObject.SetActive(false);
+                    }
+                }
+            }
             return;
         }
 
@@ -112,8 +127,11 @@ public class POIManager : MonoBehaviour
         // Deactivate everything in the scene
         DeactivateAllPOIs();
         
+        var ftue = FTUEManager.Instance;
+        if (ftue == null) ftue = Object.FindAnyObjectByType<FTUEManager>();
+
         // Only maintain active count if FTUE is NOT active
-        if (FTUEManager.Instance == null || !FTUEManager.Instance.isFTUEActive)
+        if (ftue == null || !ftue.isFTUEActive)
         {
             MaintainActiveCount();
         }
@@ -159,8 +177,24 @@ public class POIManager : MonoBehaviour
 
     private void MaintainActiveCount()
     {
+        var ftue = FTUEManager.Instance;
+        if (ftue == null) ftue = Object.FindAnyObjectByType<FTUEManager>();
+        if (ftue != null && ftue.isFTUEActive)
+        {
+            // During FTUE, we should NOT be activating random things.
+            // In fact, let's use this opportunity to hide random things that might have slipped through.
+            foreach (var p in allPOIs)
+            {
+                if (p != null && p.gameObject.activeSelf && !p.name.Contains("FTUE") && !p.name.Contains("Forced"))
+                {
+                    p.gameObject.SetActive(false);
+                }
+            }
+            return;
+        }
+
         int activeCount = 0;
-        List<PointOfInterest> candidatePool = new List<PointOfInterest>();
+List<PointOfInterest> candidatePool = new List<PointOfInterest>();
         
         foreach (var poi in allPOIs)
         {
@@ -333,7 +367,7 @@ public class POIManager : MonoBehaviour
             {
                 GameObject template = allPOIs.Count > 0 ? allPOIs[0].gameObject : poiBasePrefab;
                 GameObject newGo = Instantiate(template, navHit.position, Quaternion.identity, poiRoot);
-                newGo.name = $"Forced_{type}_{System.Guid.NewGuid().ToString().Substring(0,4)}";
+                newGo.name = $"FTUE_Forced_{type}_{System.Guid.NewGuid().ToString().Substring(0,4)}";
                 PointOfInterest poi = newGo.GetComponent<PointOfInterest>();
                 poi.enemyType = type;
                 poi.EnsureEnemy();
@@ -343,7 +377,7 @@ public class POIManager : MonoBehaviour
                 return poi;
             }
         }
-        return null;
+return null;
     }
 }
 

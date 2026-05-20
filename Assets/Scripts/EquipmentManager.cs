@@ -46,8 +46,23 @@ public class EquipmentManager : MonoBehaviour
     public AnimationClip attackSpear;
     public AnimationClip attackMagicWand;
 
+    [Header("Locomotion Overrides")]
+    public AnimationClip idleUnarmed;
+    public AnimationClip walkUnarmed;
+    public AnimationClip runUnarmed;
+    public AnimationClip victoryUnarmed;
+    public AnimationClip dieUnarmed;
+    public AnimationClip getHitUnarmed;
+
+    public AnimationClip idleOneHanded;
+    public AnimationClip walkOneHanded;
+    public AnimationClip runOneHanded;
+    public AnimationClip victoryOneHanded;
+    public AnimationClip dieOneHanded;
+    public AnimationClip getHitOneHanded;
+
     [Header("Current Equipment")]
-    public EquipmentItem currentHelmet;
+public EquipmentItem currentHelmet;
     public EquipmentItem currentWeapon;
     public EquipmentItem currentShield;
     public EquipmentItem currentChest;
@@ -201,19 +216,79 @@ public class EquipmentManager : MonoBehaviour
 
     public void RefreshAnimations()
     {
+        if (overrideController == null)
+        {
+             // Re-initialize if lost
+             if (animator != null && animator.runtimeAnimatorController != null)
+             {
+                 if (animator.runtimeAnimatorController is AnimatorOverrideController existing)
+                     overrideController = existing;
+                 else
+                 {
+                     overrideController = new AnimatorOverrideController(animator.runtimeAnimatorController);
+                     animator.runtimeAnimatorController = overrideController;
+                 }
+             }
+        }
+        
         if (overrideController == null) return;
 
-        AnimationClip targetClip = attackSingleSword;
+        // 1. Attack Animation
+        AnimationClip targetAttack = attackSingleSword;
         if (IsEquipped(currentWeapon))
         {
             string weaponName = currentWeapon.name.ToLower();
-            if (weaponName.Contains("bow")) targetClip = attackBow;
-            else if (weaponName.Contains("spear")) targetClip = attackSpear;
-            else if (weaponName.Contains("wand")) targetClip = attackMagicWand;
-            else if (weaponName.Contains("greatsword") || weaponName.Contains("hammer")) targetClip = attackTwoHandSword;
+            if (weaponName.Contains("bow")) targetAttack = attackBow;
+            else if (weaponName.Contains("spear")) targetAttack = attackSpear;
+            else if (weaponName.Contains("wand")) targetAttack = attackMagicWand;
+            else if (weaponName.Contains("greatsword") || weaponName.Contains("hammer")) targetAttack = attackTwoHandSword;
+        }
+        overrideController["Attack01_SwordAndShiled"] = targetAttack;
+
+        // 2. Locomotion & Aux Logic
+        AnimationClip locomotionIdle = null;
+        AnimationClip locomotionWalk = null;
+        AnimationClip locomotionRun = null;
+        AnimationClip locomotionVictory = null;
+        AnimationClip locomotionDie = null;
+        AnimationClip locomotionGetHit = null;
+
+        if (IsEquipped(currentShield))
+        {
+            // Use base (Sword and Shield) - null in override means use original
+        }
+        else if (IsEquipped(currentWeapon))
+        {
+            // Single Sword / One Handed
+            locomotionIdle = idleOneHanded;
+            locomotionWalk = walkOneHanded;
+            locomotionRun = runOneHanded;
+            locomotionVictory = victoryOneHanded;
+            locomotionDie = dieOneHanded;
+            locomotionGetHit = getHitOneHanded;
+        }
+        else
+        {
+            // Unarmed
+            locomotionIdle = idleUnarmed;
+            locomotionWalk = walkUnarmed;
+            locomotionRun = runUnarmed;
+            locomotionVictory = victoryUnarmed;
+            locomotionDie = dieUnarmed;
+            locomotionGetHit = getHitUnarmed;
         }
 
-        if (targetClip != null) overrideController["Attack01_SwordAndShiled"] = targetClip;
+        // Apply locomotion overrides
+        overrideController["Idle_Normal_SwordAndShield"] = locomotionIdle;
+        overrideController["MoveFWD_Normal_InPlace_SwordAndShield"] = locomotionWalk;
+        overrideController["SprintFWD_Battle_InPlace_SwordAndShield"] = locomotionRun;
+        
+        // Apply Aux overrides
+        overrideController["Victory_Battle_SwordAndShield"] = locomotionVictory;
+        overrideController["Die01_SwordAndShield"] = locomotionDie;
+        overrideController["GetHit01_SwordAndShield"] = locomotionGetHit;
+        
+        Debug.Log($"[EquipmentManager] Refreshed animations. Mode: {(IsEquipped(currentShield) ? "Shield" : (IsEquipped(currentWeapon) ? "OneHanded" : "Unarmed"))}");
     }
 
     public void RefreshVisuals()
@@ -354,6 +429,8 @@ public class EquipmentManager : MonoBehaviour
                 { 
                     if (parentName == "weapon_r") isActive = true; 
                 }
+                
+                if (isActive) Debug.Log($"[EquipmentManager] Activated weapon visual: {weaponObjects[i].name} for item {weapon.name}");
             }
             weaponObjects[i].SetActive(isActive);
         }
@@ -444,12 +521,14 @@ public class EquipmentManager : MonoBehaviour
     private bool IsWeaponMatch(string itemName, string objectName)
     {
         if (string.IsNullOrEmpty(itemName)) return false;
-        if (itemName == "Hunting Bow" && objectName == "Bow01") return true;
-        if (itemName == "Iron Spear" && objectName == "Spear01") return true;
-        if (itemName == "Stronger Stick" && objectName == "OHS01_Stick") return true;
         
         string lowerItem = itemName.ToLower().Trim();
         string lowerObject = objectName.ToLower().Trim();
+
+        if (lowerItem == "hunting bow" && lowerObject == "bow01") return true;
+        if (lowerItem == "iron spear" && lowerObject == "spear01") return true;
+        if ((lowerItem == "stronger stick" || lowerItem == "wooden stick") && lowerObject == "ohs01_stick") return true;
+        
         string[] parts = lowerItem.Split(' ');
         string lastPart = parts[parts.Length - 1];
         

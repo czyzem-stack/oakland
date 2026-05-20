@@ -164,11 +164,13 @@ if (dist < engagementRadius)
                 if (enemy.GetComponent<ChestEnemy>() == null) enemy.AddComponent<ChestEnemy>();
                 var obstacle = enemy.GetComponent<UnityEngine.AI.NavMeshObstacle>();
                 if (obstacle == null) obstacle = enemy.AddComponent<UnityEngine.AI.NavMeshObstacle>();
-                obstacle.carving = true;
+                
+                // During FTUE, disable carving to prevent Steve from being warped away when reaching the chest
+                obstacle.carving = !isFTUE; 
                 obstacle.center = new Vector3(0, 0.5f, 0);
                 obstacle.size = new Vector3(1.2f, 1.0f, 1.2f);
             }
-            else // Mushroom
+else // Mushroom
             {
                 if (enemy.GetComponent<MushroomEnemy>() == null) enemy.AddComponent<MushroomEnemy>();
             }

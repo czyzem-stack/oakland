@@ -103,8 +103,25 @@ public class HeroNavigation : MonoBehaviour
         if (agent == null) return false;
         if (!agent.enabled) agent.enabled = true;
 
+        // 1. If we are currently traversing a link (like a bridge or jump), DO NOT WARP.
+        if (agent.isOnOffMeshLink) return true;
+
+        // 2. If already on NavMesh, trust it.
+        // We only warp if the agent has completely lost its NavMesh connection (isOnNavMesh == false).
+        if (agent.isOnNavMesh) return true;
+
+        // 3. Significant drift recovery (Only if truly off-mesh)
         if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, maxDistance, NavSampleMask))
-            agent.Warp(hit.position);
+        {
+            float dist = Vector3.Distance(transform.position, hit.position);
+            // Only warp if distance is significant
+            if (dist > 0.5f) 
+            {
+                Debug.Log($"[HeroNavigation] Steve lost NavMesh grounding. Warping from {transform.position} to {hit.position} (Dist: {dist:F2}).");
+                agent.Warp(hit.position);
+            }
+            return true;
+        }
 
         return agent.isOnNavMesh;
     }
@@ -165,8 +182,12 @@ public class HeroNavigation : MonoBehaviour
             return;
         }
 
-        if (agent.enabled && !agent.isOnNavMesh && isMoving && Time.frameCount % 90 == 0)
-            TryWarpToNavMesh();
+        // Only attempt recovery warp if we are truly off-mesh and not in combat
+        if (agent.enabled && !agent.isOnNavMesh && isMoving && Time.frameCount % 120 == 0)
+        {
+            if (CombatSystem.Instance == null || !CombatSystem.Instance.isInCombat)
+                TryWarpToNavMesh();
+        }
 
         if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return;
 
@@ -224,13 +245,17 @@ public class HeroNavigation : MonoBehaviour
         if (currentTarget == null)
             SelectNextPOI();
 
-        if (currentTarget != null && agent != null && TryWarpToNavMesh())
+        if (currentTarget != null && agent != null)
         {
-            if (!spawnedCoinsForCurrentTarget)
-                StartMoving(); // No coins for now to keep it clean, or start coroutine
-            StartMoving();
+            // Only warp if we're not already on the NavMesh
+            if (!agent.isOnNavMesh) TryWarpToNavMesh();
+            
+            if (agent.isOnNavMesh)
+            {
+                StartMoving();
+            }
         }
-    }
+        }
 
 
     private IEnumerator SpawnCoinsCoroutine()
@@ -317,19 +342,27 @@ public class HeroNavigation : MonoBehaviour
         spawnedCoinsForCurrentTarget = false;
         ResetPOIs();
 
+        var ftue = FTUEManager.Instance;
+        if (ftue == null) ftue = Object.FindAnyObjectByType<FTUEManager>();
+
         // Check FTUE first
-        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        if (ftue != null && ftue.isFTUEActive)
         {
-            currentTarget = FTUEManager.Instance.GetNextTarget(transform.position);
+            currentTarget = ftue.GetNextTarget(transform.position);
             if (currentTarget != null)
             {
                 RefreshPathDistanceToTarget();
-                return;
             }
+            else
+            {
+                // If FTUE is active but no target found, don't pick a random one
+                pathDistanceToTarget = 0f;
+            }
+            return;
         }
 
         if (availablePOIs.Count == 0)
-        {
+{
             currentTarget = null;
             pathDistanceToTarget = 0f;
             return;
@@ -420,7 +453,7 @@ public class HeroNavigation : MonoBehaviour
 
         // Notify FTUE if target was killed in proper combat
         if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
-            FTUEManager.Instance.OnStageCompleted();
+            FTUEManager.Instance.OnStageCompleted(currentTarget != null ? currentTarget.name : "CombatTarget");
 
         EnsureComponents();
         TryWarpToNavMesh();
@@ -500,7 +533,7 @@ public class HeroNavigation : MonoBehaviour
 
         // Notify FTUE for NON-CHESTS here. Chests advance in ResumeAfterChest/Combat.
         if (!isChest && FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
-            FTUEManager.Instance.OnStageCompleted();
+            FTUEManager.Instance.OnStageCompleted(enemyStats.name);
 
         if (isChest && CombatSystem.Instance != null)
             CombatSystem.Instance.ShowChestUpgradePopup();
