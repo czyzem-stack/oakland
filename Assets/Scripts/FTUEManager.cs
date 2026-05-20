@@ -6,8 +6,9 @@ public enum FTUEStage
     FirstChest,
     MushroomFight,
     OrcFight,
-    SecondChest,
-    WormOrcFight,
+    ChestAfterOrc,
+    WormFight,
+    OrcFightFinal,
     LastChest,
     Completed
 }
@@ -19,7 +20,7 @@ public class FTUEManager : MonoBehaviour
     public FTUEStage currentStage = FTUEStage.InitialFight;
     public bool isFTUEActive = true;
 
-    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v2"; // Versioned to force reset if needed
+    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v3"; 
 
     void Awake()
     {
@@ -38,19 +39,16 @@ public class FTUEManager : MonoBehaviour
         switch (currentStage)
         {
             case FTUEStage.InitialFight: 
-                // Ensure Steve levels up after the first fight
                 var stats = CombatSystem.Instance?.playerStats;
-                if (stats != null && stats.level == 1)
-                {
-                    stats.AddXP(stats.MaxXP); // Force level up
-                }
+                if (stats != null && stats.level == 1) stats.AddXP(stats.MaxXP);
                 currentStage = FTUEStage.FirstChest; 
                 break;
             case FTUEStage.FirstChest: currentStage = FTUEStage.MushroomFight; break;
             case FTUEStage.MushroomFight: currentStage = FTUEStage.OrcFight; break;
-            case FTUEStage.OrcFight: currentStage = FTUEStage.SecondChest; break;
-            case FTUEStage.SecondChest: currentStage = FTUEStage.WormOrcFight; break;
-            case FTUEStage.WormOrcFight: currentStage = FTUEStage.LastChest; break;
+            case FTUEStage.OrcFight: currentStage = FTUEStage.ChestAfterOrc; break;
+            case FTUEStage.ChestAfterOrc: currentStage = FTUEStage.WormFight; break;
+            case FTUEStage.WormFight: currentStage = FTUEStage.OrcFightFinal; break;
+            case FTUEStage.OrcFightFinal: currentStage = FTUEStage.LastChest; break;
             case FTUEStage.LastChest: 
                 currentStage = FTUEStage.Completed; 
                 isFTUEActive = false;
@@ -73,16 +71,28 @@ public class FTUEManager : MonoBehaviour
             case FTUEStage.FirstChest: typeToSpawn = EnemyType.TreasureChest; break;
             case FTUEStage.MushroomFight: typeToSpawn = EnemyType.Mushroom; break;
             case FTUEStage.OrcFight: typeToSpawn = EnemyType.Orc; break;
-            case FTUEStage.SecondChest: typeToSpawn = EnemyType.TreasureChest; break;
-            case FTUEStage.WormOrcFight: typeToSpawn = Random.value > 0.5f ? EnemyType.Worm : EnemyType.Orc; break;
+            case FTUEStage.ChestAfterOrc: typeToSpawn = EnemyType.TreasureChest; break;
+            case FTUEStage.WormFight: typeToSpawn = EnemyType.Worm; break;
+            case FTUEStage.OrcFightFinal: typeToSpawn = EnemyType.Orc; break;
             case FTUEStage.LastChest: typeToSpawn = EnemyType.TreasureChest; break;
             default: return null;
         }
 
-        // Force spawn near player (reasonable distance)
-        PointOfInterest poi = POIManager.Instance.ForceSpawnPOI(typeToSpawn, playerPos, 12f, 20f);
-        return poi != null ? poi.transform : null;
-    }
+        Vector3 center = Vector3.zero;
+        Vector3 directionToCenter = (center - playerPos).normalized;
+        Vector3 targetBasePos = playerPos + directionToCenter * 15f;
+
+        PointOfInterest poi = POIManager.Instance.ForceSpawnPOI(typeToSpawn, targetBasePos, 0f, 5f);
+        if (poi != null)
+        {
+            if (currentStage == FTUEStage.ChestAfterOrc)
+            {
+                poi.gameObject.name = "FTUE_Second_Chest_POI";
+            }
+            return poi.transform;
+        }
+        return null;
+}
 }
 
 public class PlayerStart : MonoBehaviour

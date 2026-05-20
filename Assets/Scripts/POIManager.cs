@@ -41,6 +41,12 @@ public class POIManager : MonoBehaviour
 
     void Update()
     {
+        // Don't maintain random POIs during FTUE
+        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        {
+            return;
+        }
+
         updateTimer += Time.deltaTime;
         if (updateTimer >= updateInterval)
         {
@@ -82,8 +88,14 @@ public class POIManager : MonoBehaviour
             SpawnToDensity();
         }
 
+        // Deactivate all
         foreach (var poi in allPOIs) poi.gameObject.SetActive(false);
-        MaintainActiveCount();
+        
+        // Only maintain active count if FTUE is NOT active
+        if (FTUEManager.Instance == null || !FTUEManager.Instance.isFTUEActive)
+        {
+            MaintainActiveCount();
+        }
     }
 
     private void CacheStats(PointOfInterest poi)
@@ -143,18 +155,31 @@ public class POIManager : MonoBehaviour
 
                 if (stats == null || stats.isDead)
                 {
-                    poi.gameObject.SetActive(false);
-                    if (burnoutTurns > 0)
+                    // Check if this POI is currently in combat
+                    bool inCombat = false;
+                    if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
                     {
-                        burnoutRegistry[poi] = burnoutTurns;
-                        Debug.Log($"[POIManager] POI {poi.name} burned. Cooling down for {burnoutTurns} turns.");
+                        if (CombatSystem.Instance.currentEnemyStats == stats)
+                        {
+                            inCombat = true;
+                        }
+                    }
+
+                    if (!inCombat)
+                    {
+                        poi.gameObject.SetActive(false);
+                        if (burnoutTurns > 0)
+                        {
+                            burnoutRegistry[poi] = burnoutTurns;
+                            Debug.Log($"[POIManager] POI {poi.name} burned. Cooling down for {burnoutTurns} turns.");
+                        }
                     }
                 }
                 else
                 {
                     activeCount++;
                 }
-            }
+}
             else
             {
                 // Only allow activation if not in burnout

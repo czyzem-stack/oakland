@@ -88,13 +88,17 @@ public int wit = 10;
         int effectiveBrawn = brawn + (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Brawn") : 0);
         int effectiveGrit = grit + (EquipmentManager.Instance != null ? EquipmentManager.Instance.GetBonus("Grit") : 0);
         
+        // Ensure minimum values for health and mana calculation
+        effectiveBrawn = Mathf.Max(1, effectiveBrawn);
+        effectiveGrit = Mathf.Max(1, effectiveGrit);
+
         cachedMaxHP = effectiveBrawn * 5 + 10;
         cachedMaxMana = effectiveGrit * 3 + 10;
         cachedMaxXP = (int)(100 * Mathf.Pow(1.5f, level - 1));
 
         float scale = 1.0f + (level - 1) * 0.1f; 
         transform.localScale = Vector3.one * scale;
-        Debug.Log($"[CharacterStats] {name} Refreshed. Level: {level}, Scale: {scale}, MaxHP: {cachedMaxHP}");
+        Debug.Log($"[CharacterStats] {name} Refreshed. Level: {level}, Scale: {scale}, MaxHP: {cachedMaxHP}, MaxMana: {cachedMaxMana}");
     }
 
     public void AddXP(float amount)
@@ -240,9 +244,19 @@ public int wit = 10;
         // Apply defense reduction
         float reducedAmount = Mathf.Max(1, amount - Defense);
         
+        Debug.Log($"[CharacterStats] {name} taking damage. Amount: {amount}, Defense: {Defense}, Reduced: {reducedAmount}, HP: {currentHP} -> {currentHP - reducedAmount}");
+
         currentStamina = Mathf.Max(0, currentStamina - reducedAmount);
-        currentHP = Mathf.Max(0, currentHP - reducedAmount);
+        currentHP -= reducedAmount;
         
+        // FTUE Plot Armor: Steve cannot die during the tutorial sequence
+        if (currentHP <= 0 && FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive && GetComponent<EquipmentManager>() != null)
+        {
+            currentHP = 1;
+            CombatSystem.Instance?.SpawnDamageText(transform.position + Vector3.up * 2.5f, "SECOND WIND!", Color.green);
+            return;
+        }
+
         if (currentHP <= 0) { currentHP = 0; Die(); }
     }
 

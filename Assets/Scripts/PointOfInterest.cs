@@ -35,6 +35,12 @@ public class PointOfInterest : MonoBehaviour
         // Throttle proximity checks to once every 5 frames
         if (Time.frameCount % 5 != 0) return;
 
+        // During FTUE, only allow engagement if this is a forced FTUE object
+        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        {
+            if (!name.Contains("Forced") && !name.Contains("FTUE")) return;
+        }
+
         // Generic engagement check for non-patrolling enemies (Mushrooms, etc.)
         if (enemyType != EnemyType.Orc && enemyType != EnemyType.DragonBob && enemyType != EnemyType.TreasureChest)
         {
@@ -140,11 +146,14 @@ if (dist < engagementRadius)
         CharacterStats stats = enemy.GetComponent<CharacterStats>();
         if (stats == null) stats = enemy.AddComponent<CharacterStats>();
         
+        bool isFTUE = FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive;
+        float difficultyScale = isFTUE ? 0.6f : 1.0f;
+
         if (enemyType == EnemyType.TreasureChest || enemyType == EnemyType.Mushroom)
         {
             bool isChest = enemyType == EnemyType.TreasureChest;
-            stats.brawn = isChest ? 18 : 12;
-            stats.grit = isChest ? 12 : 5;
+            stats.brawn = Mathf.RoundToInt((isChest ? 18 : 12) * difficultyScale);
+            stats.grit = Mathf.RoundToInt((isChest ? 12 : 5) * difficultyScale);
             stats.finesse = 5;
             stats.ResetStats();
             var agent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
@@ -172,12 +181,15 @@ if (dist < engagementRadius)
         }
         else if (enemyType == EnemyType.Worm)
         {
-            stats.brawn = 10; stats.grit = 8; stats.ResetStats();
+            stats.brawn = Mathf.RoundToInt(10 * difficultyScale); 
+            stats.grit = Mathf.RoundToInt(8 * difficultyScale); 
+            stats.ResetStats();
             if (enemy.GetComponent<WormEnemy>() == null) enemy.AddComponent<WormEnemy>();
         }
         else
         {
-            stats.brawn = 8; stats.ResetStats();
+            stats.brawn = Mathf.RoundToInt(8 * difficultyScale); 
+            stats.ResetStats();
             if (enemy.GetComponent<OrcPatrol>() == null) enemy.AddComponent<OrcPatrol>();
         }
 

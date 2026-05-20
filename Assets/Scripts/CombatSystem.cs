@@ -53,7 +53,7 @@ public class CombatSystem : MonoBehaviour
         isPlayerTurn = true;
         isAttackSequenceRunning = false; 
         LastCombatAction = $"Combat Started against {enemy.name}";
-        Debug.Log("[CombatSystem] Combat Started against " + enemy.name);
+        Debug.Log($"[CombatSystem] Combat Started against {enemy.name} (Entity ID: {enemy.GetEntityId()})");
 
         var nav = playerStats.GetComponent<HeroNavigation>();
         if (nav != null) nav.StopMoving("Combat Start");
@@ -231,111 +231,110 @@ else
     private IEnumerator PlayerAttackSequence(int rollValue)
     {
         isAttackSequenceRunning = true;
-
-        // Energy Cost check
-        int energyCost = 5;
-        if (playerStats.currentMana < energyCost)
+        try
         {
-            SpawnDamageText(playerStats.transform.position + Vector3.up * 2.5f, "LOW ENERGY!", new Color(0.6f, 0f, 1f));
-            yield return new WaitForSeconds(0.8f);
-            isPlayerTurn = false; // Turn ends if you try to attack without energy
-            isAttackSequenceRunning = false;
-            yield break;
-        }
-
-        playerStats.ConsumeMana(energyCost);
-        
-        bool isCritical = rollValue >= playerStats.critThreshold; 
-        Animator playerAnim = playerStats.GetComponent<Animator>();
-        
-        Debug.Log($"[CombatSystem] Instant impact for roll: {rollValue}");
-        
-        // Very short delay to line up with the weapon-dice-burst
-        yield return new WaitForSeconds(0.1f);
-
-        if (currentEnemyStats == null) 
-        {
-            isAttackSequenceRunning = false;
-            yield break;
-        }
-
-        // Trigger animation
-        if (playerAnim != null)
-        {
-            playerAnim.SafeSetTrigger("Attack");
-        }
-
-        int baseDamage = rollValue + playerStats.MeleeDamage;
-        int finalDamage = isCritical ? baseDamage * 2 : baseDamage;
-        currentEnemyStats.TakeDamage(finalDamage);
-        
-        LastCombatAction = $"{currentEnemyStats.name} takes {finalDamage} dmg (Roll {rollValue})";
-        
-        string damagePrefix = isCritical ? "CRITICAL! -" : "-";
-        SpawnDamageText(currentEnemyStats.transform.position + Vector3.up * 2f, $"{damagePrefix}{finalDamage}", isCritical ? Color.yellow : Color.red);
-        
-        if (hitEffectPrefab != null)
-        {
-            GameObject fx = Instantiate(hitEffectPrefab, currentEnemyStats.transform.position + Vector3.up * 1.5f, Quaternion.identity);
-            Destroy(fx, 2f);
-        }
-
-        // Punchy feedback
-        if (camFollow != null) camFollow.Shake(0.12f, isCritical ? 0.4f : 0.2f);
-
-        Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
-        if (enemyAnim != null)
-        {
-            if (currentEnemyStats.name.Contains("Worm")) enemyAnim.CrossFade("GetHit", 0.05f);
-            else enemyAnim.SafeSetTrigger("GetHit");
-        }
-
-        // Ultra fast turnaround
-        yield return new WaitForSeconds(0.35f); 
-
-        if (currentEnemyStats != null && currentEnemyStats.currentHP <= 0)
-        {
-            // XP on kill: roll value * amount per kill
-            if (playerStats != null)
+            // Energy Cost check
+            int energyCost = 5;
+            if (playerStats.currentMana < energyCost)
             {
-                float xpGain = rollValue * playerStats.amountPerKill;
-                playerStats.AddXP(xpGain);
+                SpawnDamageText(playerStats.transform.position + Vector3.up * 2.5f, "LOW ENERGY!", new Color(0.6f, 0f, 1f));
+                yield return new WaitForSeconds(0.8f);
+                isPlayerTurn = false;
+                yield break;
             }
 
-            if (enemyAnim != null)
+            playerStats.ConsumeMana(energyCost);
+            
+            bool isCritical = rollValue >= playerStats.critThreshold; 
+            Animator playerAnim = playerStats.GetComponent<Animator>();
+            
+            yield return new WaitForSeconds(0.1f);
+
+            if (currentEnemyStats == null || currentEnemyStats.gameObject == null) yield break;
+
+            if (playerAnim != null && playerAnim.gameObject.activeInHierarchy)
             {
-                bool isDragon = currentEnemyStats.name.Contains("DragonBob");
-                bool isWorm = currentEnemyStats.name.Contains("Worm");
-                if (isDragon || isWorm) enemyAnim.CrossFade("Die", 0.1f);
-                else enemyAnim.SafeSetTrigger("Die");
+                playerAnim.SafeSetTrigger("Attack");
             }
-            yield return new WaitForSeconds(0.4f);
-            EndCombat(true);
+
+            int baseDamage = rollValue + playerStats.MeleeDamage;
+            int finalDamage = isCritical ? baseDamage * 2 : baseDamage;
+            
+            Debug.Log($"[CombatSystem] Player attacking {currentEnemyStats.name}. Roll: {rollValue}, BaseAtk: {playerStats.MeleeDamage}, Total: {finalDamage}");
+            
+            currentEnemyStats.TakeDamage(finalDamage);
+
+            LastCombatAction = $"{currentEnemyStats.name} takes {finalDamage} dmg (Roll {rollValue})";
+            
+            SpawnDamageText(currentEnemyStats.transform.position + Vector3.up * 2f, $"{(isCritical ? "CRITICAL! -" : "-")}{finalDamage}", isCritical ? Color.yellow : Color.red);
+            
+            if (hitEffectPrefab != null)
+            {
+                GameObject fx = Instantiate(hitEffectPrefab, currentEnemyStats.transform.position + Vector3.up * 1.5f, Quaternion.identity);
+                Destroy(fx, 2f);
+            }
+
+            if (camFollow != null) camFollow.Shake(0.12f, isCritical ? 0.4f : 0.2f);
+
+            Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
+            if (enemyAnim != null && enemyAnim.gameObject.activeInHierarchy)
+            {
+                if (currentEnemyStats.name.Contains("Worm")) enemyAnim.CrossFade("GetHit", 0.05f);
+                else enemyAnim.SafeSetTrigger("GetHit");
+            }
+
+            yield return new WaitForSeconds(0.35f); 
+
+            if (currentEnemyStats != null && currentEnemyStats.currentHP <= 0)
+            {
+                if (playerStats != null)
+                {
+                    float xpGain = rollValue * playerStats.amountPerKill;
+                    playerStats.AddXP(xpGain);
+                }
+
+                if (enemyAnim != null && enemyAnim.gameObject.activeInHierarchy)
+                {
+                    bool isDragon = currentEnemyStats.name.Contains("DragonBob");
+                    bool isWorm = currentEnemyStats.name.Contains("Worm");
+                    if (isDragon || isWorm) enemyAnim.CrossFade("Die", 0.1f);
+                    else enemyAnim.SafeSetTrigger("Die");
+                }
+                yield return new WaitForSeconds(0.4f);
+                EndCombat(true);
+            }
+            else
+            {
+                isPlayerTurn = false;
+            }
         }
-        else
+        finally
         {
-            isPlayerTurn = false;
+            isAttackSequenceRunning = false;
         }
-        isAttackSequenceRunning = false;
     }
 
     private IEnumerator EnemyAttackSequence()
     {
-        if (currentEnemyStats == null) yield break;
+        if (currentEnemyStats == null || currentEnemyStats.gameObject == null || !currentEnemyStats.gameObject.activeInHierarchy)
+        {
+            EndCombat(true);
+            yield break;
+        }
 
-        // If it's a mushroom, it shouldn't attack! (Chests will fight back)
         bool isPassive = currentEnemyStats.name.Contains("Mushroom");
         if (isPassive)
         {
             yield return new WaitForSeconds(0.5f);
+            isPlayerTurn = true;
             yield break;
         }
 
         Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
-bool isDragon = currentEnemyStats.name.Contains("DragonBob");
+        bool isDragon = currentEnemyStats.name.Contains("DragonBob");
         bool isWorm = currentEnemyStats.name.Contains("Worm");
 
-        if (enemyAnim != null)
+        if (enemyAnim != null && enemyAnim.gameObject.activeInHierarchy)
         {
             if (isDragon) 
             {
@@ -353,36 +352,37 @@ bool isDragon = currentEnemyStats.name.Contains("DragonBob");
             }
         }
 
-        // Faster enemy impact
         yield return new WaitForSeconds(0.2f);
 
-            int enemyRoll = Random.Range(1, 13);
-            bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
-            int damage = enemyRoll + currentEnemyStats.MeleeDamage;
-            if (isCritical) damage *= 2;
+        if (playerStats == null || playerStats.isDead) yield break;
 
-            playerStats.TakeDamage(damage);
-            LastCombatAction = $"{currentEnemyStats.name} does {damage} damg";
-            SpawnDamageText(playerStats.transform.position + Vector3.up * 2f, $"{(isCritical ? "CRITICAL! -" : "-")}{damage}", Color.red);
-        
-            if (hitEffectPrefab != null)
-            {
+        int enemyRoll = Random.Range(1, 13);
+        bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
+        int damage = enemyRoll + currentEnemyStats.MeleeDamage;
+        if (isCritical) damage *= 2;
+
+        playerStats.TakeDamage(damage);
+        LastCombatAction = $"{currentEnemyStats.name} does {damage} damg";
+        SpawnDamageText(playerStats.transform.position + Vector3.up * 2f, $"{(isCritical ? "CRITICAL! -" : "-")}{damage}", Color.red);
+    
+        if (hitEffectPrefab != null)
+        {
             GameObject fx = Instantiate(hitEffectPrefab, playerStats.transform.position + Vector3.up * 1.5f, Quaternion.identity);
             Destroy(fx, 2f);
-            }
+        }
 
-            if (camFollow != null) camFollow.Shake(0.12f, isCritical ? 0.3f : 0.15f);
+        if (camFollow != null) camFollow.Shake(0.12f, isCritical ? 0.3f : 0.15f);
 
-            Animator playerAnim = playerStats.GetComponent<Animator>();
-            if (playerAnim != null) playerAnim.SafeSetTrigger("GetHit");
+        Animator playerAnim = playerStats.GetComponent<Animator>();
+        if (playerAnim != null && playerAnim.gameObject.activeInHierarchy) playerAnim.SafeSetTrigger("GetHit");
 
-            // Stop sequence if player is dead
-            if (playerStats.isDead) yield break;
+        if (playerStats.isDead) yield break;
 
-            // Faster turnaround for next turn
-            yield return new WaitForSeconds(0.4f);
-            if (isDragon && enemyAnim != null) enemyAnim.CrossFade("Fly Float", 0.5f);
-}
+        yield return new WaitForSeconds(0.4f);
+        if (isDragon && enemyAnim != null && enemyAnim.gameObject.activeInHierarchy) enemyAnim.CrossFade("Fly Float", 0.5f);
+        
+        isPlayerTurn = true;
+    }
 
         private static Canvas worldCombatTextCanvas;
 
