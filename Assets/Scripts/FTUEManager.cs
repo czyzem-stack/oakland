@@ -11,7 +11,7 @@ public class FTUEManager : MonoBehaviour
     
     public bool isFTUEActive = true;
 
-    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v12"; 
+    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v14"; 
 
     public FTUEStep CurrentStep => (steps != null && currentStepIndex < steps.Count) ? steps[currentStepIndex] : null;
 
@@ -43,11 +43,23 @@ public class FTUEManager : MonoBehaviour
         if (isFTUEActive)
         {
              SuppressAllScenePOIs();
-             // Reset Steve to campfire if we just started
+             // Playful start: Instead of hard teleport, we only warp if he is VERY far or it's the first frame
              if (currentStepIndex == 0)
              {
                  GameObject steve = GameObject.Find("Steve") ?? GameObject.Find("Player");
-                 if (steve != null) steve.transform.position = new Vector3(33.1f, 0f, -0.7f);
+                 if (steve != null)
+                 {
+                     Vector3 campfirePos = new Vector3(33.1f, 0f, -0.7f);
+                     if (Vector3.Distance(steve.transform.position, campfirePos) > 10f)
+                     {
+                         Debug.Log("[FTUE] Steve is far from campfire, moving him to start.");
+                         var agent = steve.GetComponent<UnityEngine.AI.NavMeshAgent>();
+                         if (agent != null) agent.Warp(campfirePos);
+                         else steve.transform.position = campfirePos;
+                         
+                         CombatSystem.Instance?.SpawnDamageText(campfirePos + Vector3.up * 2f, "LET'S GO!", Color.yellow);
+                     }
+                 }
              }
         }
     }
@@ -97,39 +109,58 @@ public class FTUEManager : MonoBehaviour
         if (!isFTUEActive) return;
 
         FTUEStep current = CurrentStep;
-        if (current == null) return;
+        if (current == null) 
+        {
+            Debug.LogWarning("[FTUE] OnStageCompleted called but CurrentStep is null.");
+            return;
+        }
+
+        Debug.Log($"[FTUE] OnStageCompleted called with '{targetName}'. Current Target: '{current.targetPOI?.name}'");
 
         // Robust matching: allow "Chest" to match any TreasureChest target, 
-        // or check if targetName contains the POI name.
-        bool isChestCompletion = targetName.Contains("Chest") || targetName == "Chest";
+        // or check if targetName matches the POI name.
+        bool isChestCompletion = targetName.ToLower().Contains("chest");
         bool stepIsChest = current.targetPOI != null && current.targetPOI.enemyType == EnemyType.TreasureChest;
         
         bool isMatch = false;
-        if (current.targetPOI != null && targetName.Contains(current.targetPOI.name)) isMatch = true;
-        else if (isChestCompletion && stepIsChest) isMatch = true;
-        else if (current.pathEnemies != null)
+        if (current.targetPOI != null)
+        {
+            string tName = targetName.ToLower();
+            string pName = current.targetPOI.name.ToLower();
+            if (tName.Contains(pName) || pName.Contains(tName)) isMatch = true;
+        }
+
+        if (!isMatch && isChestCompletion && stepIsChest) isMatch = true;
+
+        if (!isMatch && current.pathEnemies != null)
         {
             foreach (var p in current.pathEnemies)
             {
-                if (p != null && targetName.Contains(p.name)) { isMatch = true; break; }
+                if (p != null)
+                {
+                    string tName = targetName.ToLower();
+                    string pName = p.name.ToLower();
+                    if (tName.Contains(pName) || pName.Contains(tName)) { isMatch = true; break; }
+                }
             }
         }
 
         if (!isMatch)
         {
-            Debug.LogWarning($"[FTUE] Target {targetName} completed but does not match Current Step {currentStepIndex} ({current.gameObject.name}). Ignoring.");
+            Debug.LogWarning($"[FTUE] Match failed. Target '{targetName}' completed but does not match Step {currentStepIndex} ('{current.targetPOI?.name}').");
             return;
         }
 
-        Debug.Log($"[FTUE] Step {currentStepIndex} COMPLETED by {targetName}. Reward: {current.rewardType}");
+        Debug.Log($"[FTUE] Step {currentStepIndex} ({current.gameObject.name}) COMPLETED by {targetName}. Reward: {current.rewardType}");
 
+        // Playful Reward: Instead of instant level up, give a small XP bonus
         if (current.levelUpOnComplete)
         {
              var stats = CombatSystem.Instance?.playerStats;
              if (stats != null)
              {
-                 stats.AddXP(stats.MaxXP);
-                 Debug.Log("[FTUE] Level Up granted for step completion.");
+                 stats.AddXP(10f); 
+                 Debug.Log("[FTUE] Playful XP bonus granted.");
              }
         }
 
@@ -139,7 +170,17 @@ public class FTUEManager : MonoBehaviour
             isFTUEActive = false;
             PlayerPrefs.SetInt(FTUE_COMPLETED_KEY, 1);
             PlayerPrefs.Save();
-            Debug.Log("[FTUE] All steps completed! Tutorial finished.");
+            Debug.Log("[FTUE] All steps completed! Steve is leaving the tutorial at Level 3 and FULLY CHARGED.");
+            
+            // Fully charge Steve
+            var stats = CombatSystem.Instance?.playerStats;
+            if (stats != null)
+            {
+                stats.currentHP = stats.MaxHP;
+                stats.currentMana = stats.MaxMana;
+                CombatSystem.Instance.SpawnDamageText(stats.transform.position + Vector3.up * 3f, "FULLY CHARGED!", Color.green);
+            }
+
             if (POIManager.Instance != null) POIManager.Instance.SetupPOIs();
         }
         else

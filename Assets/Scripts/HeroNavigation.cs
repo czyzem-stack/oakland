@@ -123,6 +123,12 @@ public class HeroNavigation : MonoBehaviour
             {
                 Debug.Log($"[HeroNavigation] Steve lost NavMesh grounding. Warping from {transform.position} to {hit.position} (Dist: {dist:F2}).");
                 agent.Warp(hit.position);
+                
+                // Playful feedback: Pop Steve into place
+                if (CombatSystem.Instance != null)
+                {
+                    CombatSystem.Instance.SpawnDamageText(hit.position + Vector3.up * 1.5f, "POP!", Color.white);
+                }
             }
             return true;
         }

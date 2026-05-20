@@ -328,7 +328,16 @@ else
             }
 
             playerStats.ConsumeMana(energyCost);
-            
+
+            // Add XP on every roll in combat as requested
+            if (playerStats != null)
+            {
+                // Slightly tuned down to ensure L3 target
+                float xpGain = rollValue * 3f; 
+                playerStats.AddXP(xpGain);
+                Debug.Log($"[CombatSystem] Gained {xpGain} XP from combat roll.");
+            }
+
             bool isCritical = rollValue >= playerStats.critThreshold; 
             Animator playerAnim = playerStats.GetComponent<Animator>();
             
@@ -593,7 +602,6 @@ else
 
             // Capture chest name for FTUE progression
             lastChestName = chestName;
-
             chestsOpenedThisRun++;
 
             // Check FTUE for specific rewards
@@ -620,7 +628,7 @@ else
             {
                 if (rewardType == FTUERewardType.T1_Weapon)
                 {
-                    // Chest 1: Wooden Stick or Random Weapon
+                    Debug.Log("[CombatSystem] FTUE Reward: T1 Weapon");
                     item1 = new EquipmentItem { name = "Wooden Stick", slot = EquipmentSlot.Weapon, attackBonus = 1 };
                     icon1 = (em.weaponIcons != null && em.weaponIcons.Length > 7) ? em.weaponIcons[7] : null;
 
@@ -634,7 +642,7 @@ else
                 }
                 else if (rewardType == FTUERewardType.T2_Armor)
                 {
-                    // Chest 2: Armor choices
+                    Debug.Log("[CombatSystem] FTUE Reward: T2 Armor Choice");
                     string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
                     int[] gritBonuses = { 1, 2, 2, 3, 3 };
                     int[] brawnBonuses = { 0, 0, 1, 0, 2 };
@@ -650,19 +658,15 @@ else
                 }
                 else if (rewardType == FTUERewardType.T3_Mixed)
                 {
-                    // Chest 3: Shield or (Helm or Cape) - Pick 1
-                    Debug.Log("[CombatSystem] Processing FTUE Reward: T3 Mixed (Shield or Random Helm/Cape)");
+                    Debug.Log("[CombatSystem] FTUE Reward: T3 Mixed (Shield or Random Helm/Cape)");
                     
-                    // Choice 1: Shield
                     int shieldIdx = UnityEngine.Random.Range(0, 4);
                     string[] shieldNames = { "Log", "Iron Shield", "Steel Shield", "Magic Shield" };
                     item1 = new EquipmentItem { name = shieldNames[shieldIdx], slot = EquipmentSlot.Shield, gritBonus = shieldIdx + 1, brawnBonus = shieldIdx / 2 };
                     icon1 = (em.shieldIcons != null && em.shieldIcons.Length > shieldIdx) ? em.shieldIcons[shieldIdx] : null;
 
-                    // Choice 2: Random Helm or Cape
                     if (UnityEngine.Random.value < 0.5f)
                     {
-                        // Helmet
                         int helmIdx = UnityEngine.Random.Range(0, 5);
                         string[] helmNames = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
                         item2 = new EquipmentItem { name = helmNames[helmIdx], slot = EquipmentSlot.Helmet, witBonus = 1 + (helmIdx / 2), gritBonus = helmIdx / 2 };
@@ -670,19 +674,16 @@ else
                     }
                     else
                     {
-                        // Cape
                         int capeIdx = UnityEngine.Random.Range(0, 3);
                         string[] capeNames = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
                         item2 = new EquipmentItem { name = capeNames[capeIdx], slot = EquipmentSlot.Cloak, witBonus = capeIdx + 1, gritBonus = capeIdx + 1 };
                         icon2 = (em.cloakIcons != null && em.cloakIcons.Length > capeIdx) ? em.cloakIcons[capeIdx] : null;
                     }
-                    
                     picks = 1;
                 }
-}
+            }
             else
             {
-                // Default random behavior
                 if (UnityEngine.Random.value < 0.5f)
                 {
                     int weaponRoll = UnityEngine.Random.Range(0, 8);
@@ -690,7 +691,7 @@ else
                     int[] bonuses = { 2, 3, 3, 4, 4, 5, 3, 2 };
                     item1 = new EquipmentItem { name = names[weaponRoll], slot = EquipmentSlot.Weapon, attackBonus = bonuses[weaponRoll] };
                     if (names[weaponRoll] == "Magic Wand 01") item1.witBonus = 2;
-                    icon1 = em.weaponIcons.Length > weaponRoll ? em.weaponIcons[weaponRoll] : null;
+                    icon1 = (em.weaponIcons != null && em.weaponIcons.Length > weaponRoll) ? em.weaponIcons[weaponRoll] : null;
                 }
                 else
                 {
@@ -699,7 +700,7 @@ else
                     int[] gritBonuses = { 1, 2, 2, 3, 3 };
                     int[] brawnBonuses = { 0, 0, 1, 0, 2 };
                     item1 = new EquipmentItem { name = armorNames[armorIndex], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[armorIndex], brawnBonus = brawnBonuses[armorIndex] };
-                    icon1 = em.chestIcons.Length > armorIndex ? em.chestIcons[armorIndex] : null;
+                    icon1 = (em.chestIcons != null && em.chestIcons.Length > armorIndex) ? em.chestIcons[armorIndex] : null;
                 }
 
                 float roll = UnityEngine.Random.value;
@@ -708,28 +709,28 @@ else
                     int idx = UnityEngine.Random.Range(0, 5);
                     string[] names = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
                     item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Helmet, witBonus = 1 + (idx / 2), gritBonus = idx / 2 };
-                    icon2 = em.helmetIcons.Length > idx ? em.helmetIcons[idx] : null;
+                    icon2 = (em.helmetIcons != null && em.helmetIcons.Length > idx) ? em.helmetIcons[idx] : null;
                 }
                 else if (roll < 0.4f)
                 {
                     int idx = UnityEngine.Random.Range(0, 3);
                     string[] names = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
                     item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Cloak, witBonus = idx + 1, gritBonus = idx + 1 };
-                    icon2 = em.cloakIcons.Length > idx ? em.cloakIcons[idx] : null;
+                    icon2 = (em.cloakIcons != null && em.cloakIcons.Length > idx) ? em.cloakIcons[idx] : null;
                 }
                 else if (roll < 0.6f)
                 {
                     int idx = UnityEngine.Random.Range(0, 3);
                     string[] names = { "Leather Gloves", "Plate Gauntlets", "Silk Mitts" };
                     item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Gloves, brawnBonus = (idx == 1 ? 2 : 1), witBonus = (idx == 2 ? 2 : 0) };
-                    icon2 = em.gloveIcons.Length > idx ? em.gloveIcons[idx] : null;
+                    icon2 = (em.gloveIcons != null && em.gloveIcons.Length > idx) ? em.gloveIcons[idx] : null;
                 }
                 else if (roll < 0.8f)
                 {
                     int idx = UnityEngine.Random.Range(0, 3);
                     string[] names = { "Leather Boots", "Iron Greaves", "Swift Shoes" };
                     item2 = new EquipmentItem { name = names[idx], slot = EquipmentSlot.Boots, finesseBonus = (idx == 2 ? 2 : 1), gritBonus = (idx == 1 ? 2 : 0) };
-                    icon2 = em.bootIcons.Length > idx ? em.bootIcons[idx] : null;
+                    icon2 = (em.bootIcons != null && em.bootIcons.Length > idx) ? em.bootIcons[idx] : null;
                 }
                 else
                 {
@@ -740,18 +741,8 @@ else
                 }
             }
 
-            EquipmentLootPopup.Show(
-                item1, 
-                item2, 
-                icon1, 
-                icon2, 
-                () => { em.Equip(item1); }, 
-                () => { em.Equip(item2); },
-                item3, icon3,
-                () => { em.Equip(item3); },
-                picks,
-                ResumeAfterChest
-            );
+            EquipmentLootPopup.Show(item1, item2, icon1, icon2, () => { em.Equip(item1); }, () => { em.Equip(item2); },
+                item3, icon3, () => { em.Equip(item3); }, picks, ResumeAfterChest);
         }
 
         private void ResumeAfterChest()
@@ -764,7 +755,6 @@ else
         {
             if (playerStats == null) return;
             playerStats.ApplyStatUpgrade(statName, 2, true);
-
             ResumeAfterChest();
         }
         }
