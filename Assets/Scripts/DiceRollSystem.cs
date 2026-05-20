@@ -217,7 +217,7 @@ private List<Rigidbody> activeDiceRBs = new List<Rigidbody>();
 
     private bool IsSteveBusy()
     {
-        if (heroNav != null && heroNav.isMoving) return true;
+        if (heroNav != null && heroNav.isMoving && !heroNav.IsStuck) return true;
         
         if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
         {
@@ -319,13 +319,17 @@ if (isCombatRoll && weaponPoint != null)
             if (isDoubles) total *= 2;
 
             // INSTANT RESOLVE IN COMBAT:
-            // We don't wait for physics. We just trigger the result and let the dice be visual juice.
+            // Snappier feel: don't wait for physics, just pop the text and move on
             if (isCombatRoll)
             {
                 ApplyResult(total, isDoubles);
-                // In combat, we finish the routine immediately so the next turn can start
                 isRolling = false; 
                 StartCoroutine(FadeAndDestroyDice(new List<GameObject>(activeDice)));
+                
+                // Small camera shake on roll impact in combat
+                var cam = Object.FindAnyObjectByType<CameraFollow>();
+                if (cam != null) cam.Shake(0.1f, 0.2f);
+                
                 yield break; 
             }
 
@@ -375,7 +379,7 @@ if (isCombatRoll && weaponPoint != null)
         }
         finally
         {
-            if (!isCombatRoll) isRolling = false;
+            isRolling = false;
             Debug.Log("[DiceRollSystem] RollRoutine finished.");
         }
     }

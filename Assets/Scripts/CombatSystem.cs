@@ -12,6 +12,7 @@ public class CombatSystem : MonoBehaviour
     public CharacterStats currentEnemyStats;
     public bool isInCombat = false;
     public bool isPlayerTurn = false;
+    public bool isCombatEnding { get; private set; } = false;
 
     [Header("Juice Prefabs")]
     public GameObject hitEffectPrefab;
@@ -120,19 +121,18 @@ public class CombatSystem : MonoBehaviour
     {
         if (isInCombat || enemy == null || enemy.isDead || (playerStats != null && playerStats.isDead) || GenericPopup.IsOpen || EquipmentLootPopup.IsOpen) 
         {
-            if (isInCombat) Debug.LogWarning($"[CombatSystem] Cannot start combat. Already in combat.");
             return;
         }
 
-        // Check if transition is already running (safety net)
-        if (isAttackSequenceRunning) return;
+        // Force clear stuck states
+        isCombatEnding = false;
+        isAttackSequenceRunning = false; 
 
         currentEnemyStats = enemy;
         isInCombat = true;
         isPlayerTurn = true;
-        isAttackSequenceRunning = false; 
         LastCombatAction = $"Combat Started against {enemy.name}";
-        Debug.Log($"[CombatSystem] Combat Started against {enemy.name} (Entity ID: {enemy.GetEntityId()})");
+        Debug.Log($"[CombatSystem] Combat Started against {enemy.name}");
 
         var nav = playerStats.GetComponent<HeroNavigation>();
         if (nav != null) nav.StopMoving("Combat Start");
@@ -147,11 +147,12 @@ public class CombatSystem : MonoBehaviour
         var eAgent = enemy.GetComponent<UnityEngine.AI.NavMeshAgent>();
 
         if (pAgent != null) pAgent.enabled = false;
-        if (eAgent != null && eAgent.isOnNavMesh) eAgent.isStopped = true;
+        // Completely disable enemy agent during the cinematic transition to prevent "fighting" with transform updates
+        if (eAgent != null) eAgent.enabled = false;
 
         // Calculate horizontal direction only to avoid vertical offsets in positioning
         Vector3 dirToPlayer = playerStats.transform.position - enemy.transform.position;
-        dirToPlayer.y = 0;
+dirToPlayer.y = 0;
         Vector3 directionToPlayer = dirToPlayer.normalized;
         if (directionToPlayer.sqrMagnitude < 0.01f) directionToPlayer = Vector3.back;
 
@@ -190,61 +191,47 @@ public class CombatSystem : MonoBehaviour
         {
             if (combatCameraAnchor == null) combatCameraAnchor = new GameObject("CombatCameraAnchor").transform;
             
-            // Smoother Camera Transition: Don't snap the anchor if it's too far
-            Vector3 camTargetMid = (pStart + eStart) * 0.5f;
-            camTargetMid.y = pStart.y;
-            
-            if (Vector3.Distance(combatCameraAnchor.position, camTargetMid) > 10f)
-                combatCameraAnchor.position = camTargetMid;
+            // Robust Anchor Placement: Avoid "moving away" by clamping to player/enemy vicinity
+            Vector3 camTargetMid = (playerStats.transform.position + enemy.transform.position) * 0.5f;
+            camTargetMid.y = playerStats.transform.position.y;
+            combatCameraAnchor.position = camTargetMid;
             
             camFollow.target = combatCameraAnchor;
             camFollow.isCombatOrbiting = true;
         }
 
-        float duration = isChest ? 1.0f : 0.45f; 
+        float duration = 0.5f; // Faster transition
         float elapsed = 0;
-
-        // If we are already close, don't force a 'jump'
-        if (Vector3.Distance(pStart, playerTarget) < 0.5f) duration = 0.2f;
 
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
             float t = elapsed / duration;
-            // Buttery smooth cubic curve
-            float curve = t * t * (3 - 2 * t); 
+            float curve = t * t * (3 - 2 * t); // Smoothstep
 
-            // Safety check in case object is destroyed during transition
             if (playerStats == null || enemy == null) yield break;
 
             playerStats.transform.position = Vector3.Lerp(pStart, playerTarget, curve);
             
             Vector3 lookTarget = new Vector3(enemyTarget.x, playerStats.transform.position.y, enemyTarget.z);
-            if ((lookTarget - playerStats.transform.position).sqrMagnitude > 0.001f)
+            if ((lookTarget - playerStats.transform.position).sqrMagnitude > 0.01f)
             {
-                Quaternion targetRot = Quaternion.LookRotation(lookTarget - playerStats.transform.position);
-                playerStats.transform.rotation = Quaternion.Slerp(pStartRot, targetRot, curve);
+                playerStats.transform.rotation = Quaternion.Slerp(pStartRot, Quaternion.LookRotation(lookTarget - playerStats.transform.position), curve);
             }
 
-            // Let the enemy lerp to their spot too
             if (!isWorm)
             {
                 enemy.transform.position = Vector3.Lerp(eStart, enemyTarget, curve);
-            }
-            
-            Vector3 eLookTarget = new Vector3(playerTarget.x, enemy.transform.position.y, playerTarget.z);
-            if ((eLookTarget - enemy.transform.position).sqrMagnitude > 0.001f)
-            {
-                Quaternion targetRot = Quaternion.LookRotation(eLookTarget - enemy.transform.position);
-                enemy.transform.rotation = Quaternion.Slerp(eStartRot, targetRot, curve);
+                Vector3 eLookTarget = new Vector3(playerTarget.x, enemy.transform.position.y, playerTarget.z);
+                if ((eLookTarget - enemy.transform.position).sqrMagnitude > 0.01f)
+                {
+                    enemy.transform.rotation = Quaternion.Slerp(eStartRot, Quaternion.LookRotation(eLookTarget - enemy.transform.position), curve);
+                }
             }
 
-            // Move camera anchor as they move
             if (combatCameraAnchor != null)
             {
-                Vector3 currentMid = (playerStats.transform.position + enemy.transform.position) * 0.5f;
-                currentMid.y = playerStats.transform.position.y;
-                combatCameraAnchor.position = currentMid;
+                combatCameraAnchor.position = (playerStats.transform.position + enemy.transform.position) * 0.5f;
             }
 
             yield return null;
@@ -350,6 +337,11 @@ else
                 playerAnim.SafeSetTrigger("Attack");
             }
 
+            // Small delay for the animation swing to reach the target before damage hits
+            yield return new WaitForSeconds(0.25f);
+
+            if (currentEnemyStats == null || currentEnemyStats.gameObject == null) yield break;
+
             int baseDamage = rollValue + playerStats.MeleeDamage;
 
             // Stage FTUE: Steve deals double damage to finish tutorial fights faster
@@ -383,15 +375,19 @@ else
                 else enemyAnim.SafeSetTrigger("GetHit");
             }
 
-            yield return new WaitForSeconds(0.35f); 
+            yield return new WaitForSeconds(0.9f); 
 
             if (currentEnemyStats != null && currentEnemyStats.currentHP <= 0)
             {
-                if (playerStats != null)
-                {
-                    float xpGain = rollValue * playerStats.amountPerKill;
-                    playerStats.AddXP(xpGain);
-                }
+                isCombatEnding = true;
+
+                // Immediately disable physical presence and AI to stop "post-death" attacks
+                var obstacle = currentEnemyStats.GetComponent<UnityEngine.AI.NavMeshObstacle>();
+                if (obstacle != null) obstacle.enabled = false;
+                var collider = currentEnemyStats.GetComponent<Collider>();
+                if (collider != null) collider.enabled = false;
+                var orc = currentEnemyStats.GetComponent<OrcPatrol>();
+                if (orc != null) orc.enabled = false;
 
                 if (enemyAnim != null && enemyAnim.gameObject.activeInHierarchy)
                 {
@@ -400,30 +396,30 @@ else
                     if (isDragon || isWorm) enemyAnim.CrossFade("Die", 0.1f);
                     else enemyAnim.SafeSetTrigger("Die");
                 }
-                yield return new WaitForSeconds(0.4f);
+                
+                // Transition to victory sequence
                 EndCombat(true);
             }
             else
             {
                 isPlayerTurn = false;
             }
-        }
-        finally
-        {
+            }
+            finally
+            {
             isAttackSequenceRunning = false;
-        }
-    }
+            }
+            }
 
     private IEnumerator EnemyAttackSequence()
     {
-        if (currentEnemyStats == null || currentEnemyStats.gameObject == null || !currentEnemyStats.gameObject.activeInHierarchy)
+        if (isCombatEnding || currentEnemyStats == null || currentEnemyStats.isDead || !currentEnemyStats.gameObject.activeInHierarchy)
         {
-            EndCombat(true);
             yield break;
         }
 
         bool isPassive = currentEnemyStats.name.Contains("Mushroom");
-        if (isPassive)
+if (isPassive)
         {
             yield return new WaitForSeconds(0.5f);
             isPlayerTurn = true;
@@ -452,12 +448,12 @@ else
             }
         }
 
-        yield return new WaitForSeconds(0.2f);
+        yield return new WaitForSeconds(0.45f);
 
-        if (playerStats == null || playerStats.isDead) yield break;
+        if (playerStats == null || playerStats.isDead || currentEnemyStats == null) yield break;
 
         int enemyRoll = Random.Range(1, 13);
-        bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
+bool isCritical = enemyRoll >= currentEnemyStats.critThreshold;
         int damage = enemyRoll + currentEnemyStats.MeleeDamage;
         if (isCritical) damage *= 2;
 
@@ -500,75 +496,151 @@ else
 
         public void EndCombat(bool playerWon)
         {
-            if (!isInCombat) return;
-            isInCombat = false;
+            if (!isInCombat && !isCombatEnding) return;
+        
+            if (playerWon)
+            {
+                StartCoroutine(VictorySequenceRoutine());
+            }
+            else
+            {
+                isCombatEnding = false;
+                isInCombat = false;
+                isPlayerTurn = false;
+                isAttackSequenceRunning = false;
+                LastCombatAction = "Defeat... Steve has fallen.";
+                StartCoroutine(PlayerDeathSequenceRoutine());
+            }
+        }
+
+        private IEnumerator VictorySequenceRoutine()
+        {
+            // Immediate State Lock
+            isCombatEnding = true;
+            isInCombat = false; // Hide combat UI immediately
             isPlayerTurn = false;
             isAttackSequenceRunning = false;
-
+        
+            LastCombatAction = "Victory! Steve won the battle.";
+        
             Animator playerAnim = playerStats.GetComponent<Animator>();
-            if (playerAnim != null)
+            if (playerAnim != null) 
             {
                 playerAnim.ResetTrigger("Attack");
                 playerAnim.ResetTrigger("GetHit");
+                playerAnim.ResetTrigger("Victory");
                 playerAnim.SafeSetFloat("Speed", 0f);
+                playerAnim.CrossFade("Victory", 0.2f);
             }
 
-            if (playerWon)
+            if (currentEnemyStats != null)
             {
-                LastCombatAction = "Victory! Steve won the battle.";
-                // Victory cleanup
-                if (camFollow != null)
+                // Immediately disable enemy logic and physical presence
+                var chestEnemy = currentEnemyStats.GetComponent<ChestEnemy>();
+                if (chestEnemy != null) chestEnemy.enabled = false;
+                var orcPatrol = currentEnemyStats.GetComponent<OrcPatrol>();
+                if (orcPatrol != null) orcPatrol.enabled = false;
+                var wormEnemy = currentEnemyStats.GetComponent<WormEnemy>();
+                if (wormEnemy != null) wormEnemy.enabled = false;
+            
+                var obstacle = currentEnemyStats.GetComponent<UnityEngine.AI.NavMeshObstacle>();
+                if (obstacle != null) obstacle.enabled = false;
+                var collider = currentEnemyStats.GetComponent<Collider>();
+                if (collider != null) collider.enabled = false;
+
+                bool isChest = currentEnemyStats.name.Contains("TreasureChest") || currentEnemyStats.name.Contains("Chest");
+                bool isDragon = currentEnemyStats.name.Contains("DragonBob");
+                bool isOrc = currentEnemyStats.name.Contains("Orc");
+
+                if (isOrc) GameSettings.Instance?.RegisterOrcKill();
+
+                string defeatedName = currentEnemyStats.name;
+
+                // Staggered Rewards - Common Sense Flow
+                if (!isChest)
                 {
-                    camFollow.isCombatOrbiting = false;
-                    camFollow.target = playerStats.transform;
-                    if (combatCameraAnchor != null) { Destroy(combatCameraAnchor.gameObject); combatCameraAnchor = null; }
+                    // 1. XP Pop
+                    float xpGain = isDragon ? 50f : 20f;
+                    playerStats.AddXP(xpGain);
+                
+                    yield return new WaitForSeconds(0.5f);
+                
+                    // 2. Gold Pop
+                    int goldGain = isDragon ? Random.Range(100, 201) : Random.Range(5, 11);
+                    playerStats.AddGold(goldGain);
+                
+                    yield return new WaitForSeconds(0.5f);
                 }
 
-                var agent = playerStats.GetComponent<UnityEngine.AI.NavMeshAgent>();
-                if (agent != null)
+                // For chests, we want to see them open and then show the popup
+                if (isChest)
                 {
-                    agent.enabled = true;
-                    var nav = playerStats.GetComponent<HeroNavigation>();
-                    if (nav != null)
-                        nav.EnsureOnNavMesh();
-                    else if (UnityEngine.AI.NavMesh.SamplePosition(playerStats.transform.position, out UnityEngine.AI.NavMeshHit hit, 10.0f, UnityEngine.AI.NavMesh.AllAreas))
-                    {
-                        agent.Warp(hit.position);
-                    }
+                    // Play open animation
+                    Animator enemyAnim = currentEnemyStats.GetComponent<Animator>();
+                    if (enemyAnim != null) enemyAnim.CrossFade("Die", 0.1f);
+
+                    // Wait for the chest to "open" fully
+                    yield return new WaitForSeconds(1.2f);
+                
+                    // Show popup BEFORE destroying the object so it stays in the background
+                    ShowChestUpgradePopup(defeatedName);
+                
+                    // The popup callback (ResumeAfterChest) handles the rest of the flow
+                    yield break;
                 }
-
-                if (currentEnemyStats != null)
+                else
                 {
-                    if (playerAnim != null) playerAnim.SafeSetTrigger("Victory");
-                    bool isChest = currentEnemyStats.name.Contains("TreasureChest") || currentEnemyStats.name.Contains("Chest");
-                    bool isDragon = currentEnemyStats.name.Contains("DragonBob");
-                    bool isOrc = currentEnemyStats.name.Contains("Orc");
-
-                    if (isOrc) GameSettings.Instance?.RegisterOrcKill();
-
-                    if (isChest) playerStats.AddGold(Random.Range(20, 51));
-                    else if (isDragon) playerStats.AddGold(Random.Range(100, 201));
-                    else playerStats.AddGold(Random.Range(5, 11));
-
-                    string defeatedName = currentEnemyStats.name;
+                    // For regular enemies, destroy them after showing the death animation
                     GameObject.Destroy(currentEnemyStats.gameObject, isDragon ? 3.0f : 1.5f);
-                    currentEnemyStats = null;
+                
+                    // Savor the victory pose
+                    yield return new WaitForSeconds(1.5f);
 
-                    if (isChest)
-                        ShowChestUpgradePopup(defeatedName);
-                    else
-                    {
-                        var nav = playerStats.GetComponent<HeroNavigation>();
-                        if (nav != null) nav.ResumeAfterCombat(defeatedName);
-                    }
-}
-}
+                    // Final cleanup
+                    FinishCombatCleanup(defeatedName);
+                }
+            }
             else
             {
-                LastCombatAction = "Defeat... Steve has fallen.";
-                // Failure cleanup (Steve died)
-                StartCoroutine(PlayerDeathSequenceRoutine());
+                FinishCombatCleanup("");
             }
+        
+            isCombatEnding = false;
+        }
+
+        public void ForceResetCombat()
+        {
+            isInCombat = false;
+            isCombatEnding = false;
+            isAttackSequenceRunning = false;
+            if (combatCameraAnchor != null) { Destroy(combatCameraAnchor.gameObject); combatCameraAnchor = null; }
+            Debug.Log("[CombatSystem] Force reset applied.");
+        }
+
+        private void FinishCombatCleanup(string defeatedName)
+        {
+            isInCombat = false;
+            isCombatEnding = false;
+
+            if (camFollow != null)
+            {
+                camFollow.isCombatOrbiting = false;
+                // Transition camera back smoothly
+                camFollow.target = playerStats.transform;
+                if (combatCameraAnchor != null) { Destroy(combatCameraAnchor.gameObject); combatCameraAnchor = null; }
+            }
+
+            var agent = playerStats.GetComponent<UnityEngine.AI.NavMeshAgent>();
+            if (agent != null)
+            {
+                agent.enabled = true;
+                var nav = playerStats.GetComponent<HeroNavigation>();
+                // Ensure Steve is grounded but don't force a 'warp' if he's close enough
+                if (nav != null) nav.EnsureOnNavMesh(5.0f);
+            }
+
+            var heroNav = playerStats.GetComponent<HeroNavigation>();
+            if (heroNav != null) heroNav.ResumeAfterCombat(defeatedName);
         }
 
         private IEnumerator PlayerDeathSequenceRoutine()
@@ -626,9 +698,9 @@ else
 
             if (isFTUE && rewardType != FTUERewardType.None)
             {
-                if (rewardType == FTUERewardType.T1_Weapon)
+                if (rewardType == FTUERewardType.WoodenStick_RandomWeapon)
                 {
-                    Debug.Log("[CombatSystem] FTUE Reward: T1 Weapon");
+                    Debug.Log("[CombatSystem] FTUE Reward: Wooden Stick / Random Weapon");
                     item1 = new EquipmentItem { name = "Wooden Stick", slot = EquipmentSlot.Weapon, attackBonus = 1 };
                     icon1 = (em.weaponIcons != null && em.weaponIcons.Length > 7) ? em.weaponIcons[7] : null;
 
@@ -640,9 +712,9 @@ else
                     if (names[weaponRoll] == "Magic Wand 01") item2.witBonus = 2;
                     icon2 = (em.weaponIcons != null && em.weaponIcons.Length > weaponRoll) ? em.weaponIcons[weaponRoll] : null;
                 }
-                else if (rewardType == FTUERewardType.T2_Armor)
+                else if (rewardType == FTUERewardType.Armor_Armor)
                 {
-                    Debug.Log("[CombatSystem] FTUE Reward: T2 Armor Choice");
+                    Debug.Log("[CombatSystem] FTUE Reward: Armor / Armor Choice");
                     string[] armorNames = { "Padded Cloth", "Leather Armor", "Brigandine", "Chainmail", "Plate Armor" };
                     int[] gritBonuses = { 1, 2, 2, 3, 3 };
                     int[] brawnBonuses = { 0, 0, 1, 0, 2 };
@@ -656,33 +728,23 @@ else
                     item2 = new EquipmentItem { name = armorNames[idx2], slot = EquipmentSlot.Chest, gritBonus = gritBonuses[idx2], brawnBonus = brawnBonuses[idx2] };
                     icon2 = (em.chestIcons != null && em.chestIcons.Length > idx2) ? em.chestIcons[idx2] : null;
                 }
-                else if (rewardType == FTUERewardType.T3_Mixed)
+                else if (rewardType == FTUERewardType.Shield_Helm)
                 {
-                    Debug.Log("[CombatSystem] FTUE Reward: T3 Mixed (Shield or Random Helm/Cape)");
+                    Debug.Log("[CombatSystem] FTUE Reward: Shield / Helm Choice");
                     
                     int shieldIdx = UnityEngine.Random.Range(0, 4);
                     string[] shieldNames = { "Log", "Iron Shield", "Steel Shield", "Magic Shield" };
                     item1 = new EquipmentItem { name = shieldNames[shieldIdx], slot = EquipmentSlot.Shield, gritBonus = shieldIdx + 1, brawnBonus = shieldIdx / 2 };
                     icon1 = (em.shieldIcons != null && em.shieldIcons.Length > shieldIdx) ? em.shieldIcons[shieldIdx] : null;
 
-                    if (UnityEngine.Random.value < 0.5f)
-                    {
-                        int helmIdx = UnityEngine.Random.Range(0, 5);
-                        string[] helmNames = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
-                        item2 = new EquipmentItem { name = helmNames[helmIdx], slot = EquipmentSlot.Helmet, witBonus = 1 + (helmIdx / 2), gritBonus = helmIdx / 2 };
-                        icon2 = (em.helmetIcons != null && em.helmetIcons.Length > helmIdx) ? em.helmetIcons[helmIdx] : null;
-                    }
-                    else
-                    {
-                        int capeIdx = UnityEngine.Random.Range(0, 3);
-                        string[] capeNames = { "Traveler's Cloak", "Ranger Cape", "Royal Mantle" };
-                        item2 = new EquipmentItem { name = capeNames[capeIdx], slot = EquipmentSlot.Cloak, witBonus = capeIdx + 1, gritBonus = capeIdx + 1 };
-                        icon2 = (em.cloakIcons != null && em.cloakIcons.Length > capeIdx) ? em.cloakIcons[capeIdx] : null;
-                    }
+                    int helmIdx = UnityEngine.Random.Range(0, 5);
+                    string[] helmNames = { "Iron Helmet", "Chainmail Hood", "Viking Helmet", "Crusader Helmet", "Great Helmet" };
+                    item2 = new EquipmentItem { name = helmNames[helmIdx], slot = EquipmentSlot.Helmet, witBonus = 1 + (helmIdx / 2), gritBonus = helmIdx / 2 };
+                    icon2 = (em.helmetIcons != null && em.helmetIcons.Length > helmIdx) ? em.helmetIcons[helmIdx] : null;
                     picks = 1;
                 }
             }
-            else
+else
             {
                 if (UnityEngine.Random.value < 0.5f)
                 {
@@ -747,8 +809,16 @@ else
 
         private void ResumeAfterChest()
         {
-            var nav = playerStats.GetComponent<HeroNavigation>();
-            if (nav != null) nav.ResumeAfterCombat(lastChestName);
+            // Destroy the chest now that we are done with the loot
+            if (currentEnemyStats != null)
+            {
+                // Deactivate first to be doubly sure NavMesh is clear
+                currentEnemyStats.gameObject.SetActive(false);
+                GameObject.Destroy(currentEnemyStats.gameObject);
+                currentEnemyStats = null;
+            }
+
+            FinishCombatCleanup(lastChestName);
         }
 
         private void ApplyChestUpgrade(string statName)

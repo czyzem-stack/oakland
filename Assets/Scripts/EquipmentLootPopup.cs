@@ -104,7 +104,10 @@ public class EquipmentLootPopup : MonoBehaviour
         openCount = Mathf.Max(0, openCount - 1);
         if (openCount == 0 && !GenericPopup.IsOpen) Time.timeScale = 1f;
         
-        onComplete?.Invoke();
+        // Safety fallback if not triggered by ClosePopup
+        var callback = onComplete;
+        onComplete = null;
+        callback?.Invoke();
     }
 
     public void Setup(EquipmentItem item1, EquipmentItem item2, Sprite icon1, Sprite icon2, Action onChoice1, Action onChoice2, 
@@ -279,6 +282,12 @@ public class EquipmentLootPopup : MonoBehaviour
     private void ClosePopup()
     {
         if (EquipmentManager.Instance != null) EquipmentManager.Instance.ClearPreview();
+        
+        // Explicitly trigger completion before destruction
+        var callback = onComplete;
+        onComplete = null; 
+        callback?.Invoke();
+
         Destroy(gameObject);
     }
 

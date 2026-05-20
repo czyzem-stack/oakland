@@ -267,15 +267,6 @@ float reducedAmount = Mathf.Max(1, amount - Defense);
 
         currentStamina = Mathf.Max(0, currentStamina - reducedAmount);
         currentHP -= reducedAmount;
-        
-        // FTUE Plot Armor: Steve cannot die during the tutorial, clamp to 1 HP
-        if (currentHP <= 0 && isFTUE && isPlayer)
-        {
-            currentHP = 1;
-            CombatSystem.Instance?.SpawnDamageText(transform.position + Vector3.up * 2.5f, "STAYING ALIVE!", Color.green);
-            return;
-        }
-
         // Second Wind / FTUE Plot Armor: Only trigger if the manual setting is ON
         HeroSettings settings = GetComponent<HeroSettings>();
         bool secondWindEnabled = settings != null && settings.secondWind;
@@ -293,9 +284,18 @@ float reducedAmount = Mathf.Max(1, amount - Defense);
     private void Die()
     {
         isDead = true;
+
+        if (GetComponent<EquipmentManager>() != null)
+        {
+            // If the player dies during the tutorial, mark it as completed 
+            // so they don't have to restart it on reload.
+            PlayerPrefs.SetInt("FTUE_Completed_v14", 1);
+            PlayerPrefs.Save();
+            if (FTUEManager.Instance != null) FTUEManager.Instance.isFTUEActive = false;
+        }
         
         Animator anim = GetComponent<Animator>();
-        if (anim != null) anim.SafeSetTrigger("Die");
+if (anim != null) anim.SafeSetTrigger("Die");
 
         var nav = GetComponent<HeroNavigation>();
         if (nav != null) nav.StopMoving("Death");

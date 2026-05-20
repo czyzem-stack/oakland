@@ -286,21 +286,34 @@ List<PointOfInterest> candidatePool = new List<PointOfInterest>();
             }
         }
 
+        // Find player to avoid spawning/activating on top of them
+        GameObject player = GameObject.Find("Steve") ?? GameObject.Find("Player");
+        Vector3 playerPos = player != null ? player.transform.position : Vector3.zero;
+
         while (activeCount < maxActiveAtOnce && candidatePool.Count > 0)
         {
             int index = Random.Range(0, candidatePool.Count);
             PointOfInterest toActivate = candidatePool[index];
             
-            // Check distance from existing actives
+            // Check distance from existing actives AND the player
             bool tooClose = false;
-            foreach (var activePoi in allPOIs)
+            
+            if (player != null && Vector3.Distance(toActivate.transform.position, playerPos) < minDistance)
             {
-                if (activePoi.gameObject.activeSelf && activePoi != toActivate)
+                tooClose = true;
+            }
+
+            if (!tooClose)
+            {
+                foreach (var activePoi in allPOIs)
                 {
-                    if (Vector3.Distance(toActivate.transform.position, activePoi.transform.position) < minDistance)
+                    if (activePoi.gameObject.activeSelf && activePoi != toActivate)
                     {
-                        tooClose = true;
-                        break;
+                        if (Vector3.Distance(toActivate.transform.position, activePoi.transform.position) < minDistance)
+                        {
+                            tooClose = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -314,7 +327,7 @@ List<PointOfInterest> candidatePool = new List<PointOfInterest>();
             
             candidatePool.RemoveAt(index);
         }
-    }
+}
 
     private void SnapToSurface(Transform t)
     {

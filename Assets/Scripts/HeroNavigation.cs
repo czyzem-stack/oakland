@@ -36,6 +36,7 @@ public class HeroNavigation : MonoBehaviour
     private int lastDiceTotal = 0;
     private float lastRollMeters = 0f;
 
+    public bool IsStuck => isMoving && stuckTimer > 1.5f;
     public int LastDiceTotal => lastDiceTotal;
     public float LastRollMeters => lastRollMeters;
     public float PathDistanceToTarget => pathDistanceToTarget;
@@ -105,29 +106,30 @@ public class HeroNavigation : MonoBehaviour
     private bool TryWarpToNavMesh(float maxDistance = 10f)
     {
         if (agent == null) return false;
+        
+        // Ensure agent is enabled before checking or warping
         if (!agent.enabled) agent.enabled = true;
 
         // 1. If we are currently traversing a link (like a bridge or jump), DO NOT WARP.
         if (agent.isOnOffMeshLink) return true;
 
-        // 2. If already on NavMesh, trust it.
-        // We only warp if the agent has completely lost its NavMesh connection (isOnNavMesh == false).
-        if (agent.isOnNavMesh) return true;
-
-        // 3. Significant drift recovery (Only if truly off-mesh)
-        if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, maxDistance, NavSampleMask))
+        // 2. Significant drift recovery or grounding check
+        // We use a larger search radius if we are currently "off mesh"
+        float searchRadius = agent.isOnNavMesh ? maxDistance : maxDistance * 2f;
+        if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, searchRadius, NavSampleMask))
         {
             float dist = Vector3.Distance(transform.position, hit.position);
-            // Only warp if distance is significant
-            if (dist > 0.5f) 
+            
+            // CRITICAL: If agent.isOnNavMesh is false, we MUST warp to get back on it,
+            // even if the distance is 0. This fixes the "False but near" state.
+            if (!agent.isOnNavMesh || dist > 1.25f) 
             {
-                Debug.Log($"[HeroNavigation] Steve lost NavMesh grounding. Warping from {transform.position} to {hit.position} (Dist: {dist:F2}).");
+                Debug.Log($"[HeroNavigation] Grounding Steve. Pos: {transform.position}, Hit: {hit.position}, Dist: {dist:F2}, WasOnMesh: {agent.isOnNavMesh}");
                 agent.Warp(hit.position);
                 
-                // Playful feedback: Pop Steve into place
-                if (CombatSystem.Instance != null)
+                if (CombatSystem.Instance != null && dist > 1.0f)
                 {
-                    CombatSystem.Instance.SpawnDamageText(hit.position + Vector3.up * 1.5f, "POP!", Color.white);
+                    CombatSystem.Instance.SpawnDamageText(hit.position + Vector3.up * 1.5f, "GROUNDED", Color.white);
                 }
             }
             return true;
@@ -150,9 +152,11 @@ public class HeroNavigation : MonoBehaviour
         if (GameSettings.Instance != null)
             metersPerDicePoint = GameSettings.Instance.metersPerDicePoint;
 
-        // Warp to spawn point if available
+        // Warp to spawn point if available, unless FTUE is active and will handle it
+        bool isFTUE = FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive;
         PlayerStart spawn = Object.FindAnyObjectByType<PlayerStart>();
-        if (spawn != null)
+        
+        if (spawn != null && !isFTUE)
         {
             // Disable agent briefly to warp
             if (agent != null) agent.enabled = false;
@@ -161,6 +165,10 @@ public class HeroNavigation : MonoBehaviour
             if (agent != null) agent.enabled = true;
             
             Debug.Log($"[HeroNavigation] Warped Steve to spawn point: {spawn.name} at {spawn.transform.position}");
+        }
+        else if (isFTUE)
+        {
+            Debug.Log("[HeroNavigation] Skipping default spawn warp: FTUE is active.");
         }
         else
         {
@@ -182,23 +190,49 @@ public class HeroNavigation : MonoBehaviour
 
     private float lastTargetSearchTime = 0f;
     private const float targetSearchCooldown = 1.0f;
+    private float stuckTimer = 0f;
+    private bool tutorialTransitionFlag = false;
+
+    public void NotifyTutorialCompleted()
+    {
+        tutorialTransitionFlag = true;
+        StopMoving("Tutorial End");
+        ClearTarget();
+        remainingMeters = 0f;
+        StartCoroutine(ResetTransitionFlag());
+    }
+
+    private IEnumerator ResetTransitionFlag()
+    {
+        yield return new WaitForSeconds(0.5f);
+        tutorialTransitionFlag = false;
+    }
 
     void Update()
     {
-        if (agent == null || stats.isDead) return;
+        if (agent == null || stats.isDead || tutorialTransitionFlag) return;
 
+        // 1. Popup Lock
         if (GenericPopup.IsOpen || EquipmentLootPopup.IsOpen)
         {
             if (isMoving) StopMoving("Popup open");
-            currentAnimSpeed = Mathf.MoveTowards(currentAnimSpeed, 0f, Time.deltaTime * 8f);
-            if (animator != null) animator.SafeSetFloat("Speed", currentAnimSpeed);
+            UpdateAnimation(0f);
             return;
         }
 
-        // Auto-resume movement if no popup is open and distance remains
-        if (!isMoving && remainingMeters > 0.1f && !GenericPopup.IsOpen && !EquipmentLootPopup.IsOpen)
+        // 2. Combat Lock - More robust check
+        bool inCombatTransition = CombatSystem.Instance != null && (CombatSystem.Instance.isInCombat || CombatSystem.Instance.isCombatEnding);
+        if (inCombatTransition)
         {
-            if (CombatSystem.Instance == null || !CombatSystem.Instance.isInCombat)
+            if (isMoving) StopMoving("Combat active");
+            UpdateAnimation(0f);
+            return;
+        }
+
+        // 3. Movement Management
+        if (remainingMeters > 0.01f)
+        {
+            if (!isMoving)
             {
                 if (currentTarget == null && Time.time > lastTargetSearchTime + targetSearchCooldown)
                 {
@@ -208,46 +242,88 @@ public class HeroNavigation : MonoBehaviour
                 
                 if (currentTarget != null) StartMoving();
             }
+            
+            if (isMoving) HandleActiveMovement();
         }
-
-        // Only attempt recovery warp if we are truly off-mesh and not in combat
-        if (agent.enabled && !agent.isOnNavMesh && isMoving && Time.frameCount % 120 == 0)
+else if (isMoving)
         {
-            if (CombatSystem.Instance == null || !CombatSystem.Instance.isInCombat)
-                TryWarpToNavMesh();
-        }
-
-        if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return;
-
-        if (isMoving && remainingMeters > 0)
-        {
-            if (CanControlAgent() && agent.isStopped) agent.isStopped = false;
-
-            float distMoved = Vector3.Distance(transform.position, lastPosition);
-            if (distMoved < 5f)
-            {
-                remainingMeters -= distMoved;
-                metersTraveledSinceLastCoin += distMoved;
-            }
-            lastPosition = transform.position;
-
-            float targetSpeed = agent.velocity.magnitude / (agent.speed > 0 ? agent.speed : 1f);
-            currentAnimSpeed = Mathf.Lerp(currentAnimSpeed, targetSpeed, Time.deltaTime * 15f);
-
-            if (animator != null) animator.SafeSetFloat("Speed", currentAnimSpeed);
-
-            if (currentTarget != null && !agent.pathPending && agent.isOnNavMesh && agent.remainingDistance <= agent.stoppingDistance)
-                OnReachedPOI();
-            else if (remainingMeters <= 0.01f)
-                StopMoving("Out of distance");
+            StopMoving("Out of distance");
         }
         else
         {
-            currentAnimSpeed = Mathf.MoveTowards(currentAnimSpeed, 0f, Time.deltaTime * 10f);
-            if (animator != null) animator.SafeSetFloat("Speed", currentAnimSpeed);
-            if (isMoving) StopMoving("Movement Paused");
+            UpdateAnimation(0f);
             lastPosition = transform.position;
         }
+    }
+
+    private void HandleActiveMovement()
+    {
+        // Force grounding every frame if we are supposed to be moving
+        if (!agent.isOnNavMesh)
+        {
+            if (!TryWarpToNavMesh(20f)) 
+            {
+                StopMoving("Lost NavMesh");
+                return;
+            }
+        }
+
+        if (agent.isStopped) agent.isStopped = false;
+
+        float distMoved = Vector3.Distance(transform.position, lastPosition);
+        lastPosition = transform.position;
+
+        // Stuck detection
+        if (distMoved < 0.005f)
+        {
+            stuckTimer += Time.deltaTime;
+            if (stuckTimer > 1.5f) // Faster recovery
+            {
+                Debug.Log("[HeroNavigation] Steve is stuck. Grounding.");
+                TryWarpToNavMesh(5f);
+                stuckTimer = 0f;
+            }
+        }
+        else
+        {
+            stuckTimer = 0f;
+        }
+
+        // Distance tracking
+        if (distMoved < 5f) 
+        {
+            remainingMeters -= distMoved;
+            metersTraveledSinceLastCoin += distMoved;
+        }
+
+        // ANTI-GLIDE ANIMATION: Check intent vs reality
+        float moveIntent = agent.desiredVelocity.magnitude / (agent.speed > 0 ? agent.speed : 1f);
+        float actualMotion = (distMoved / Time.deltaTime) / (agent.speed > 0 ? agent.speed : 1f);
+        
+        // targetAnimSpeed should favor intent so he "runs in place" if blocked
+        float targetAnimSpeed = Mathf.Max(moveIntent * 0.8f, Mathf.Clamp01(actualMotion));
+        if (remainingMeters > 0.1f && targetAnimSpeed < 0.3f) targetAnimSpeed = 0.3f; // Force movement look
+
+        UpdateAnimation(targetAnimSpeed);
+
+        // Arrival Logic: Increased tolerance for complex POIs
+        float directDist = currentTarget != null ? Vector3.Distance(transform.position, currentTarget.position) : float.MaxValue;
+        bool reached = currentTarget != null && !agent.pathPending && 
+                       (agent.remainingDistance <= agent.stoppingDistance || 
+                       (agent.remainingDistance < agent.stoppingDistance + 1.5f && stuckTimer > 0.5f) ||
+                       (directDist < agent.stoppingDistance + 1.2f && stuckTimer > 0.3f));
+
+        if (reached)
+        {
+            OnReachedPOI();
+        }
+    }
+
+    private void UpdateAnimation(float speed)
+    {
+        if (animator == null) return;
+        currentAnimSpeed = Mathf.Lerp(currentAnimSpeed, speed, Time.deltaTime * 12f);
+        animator.SafeSetFloat("Speed", currentAnimSpeed);
     }
 
     public void OnDiceRolled(int totalValue)
@@ -416,14 +492,28 @@ public class HeroNavigation : MonoBehaviour
     private void StartMoving()
     {
         if (currentTarget == null || agent == null) return;
-        if (!TryWarpToNavMesh() || !CanControlAgent()) { isMoving = false; return; }
+        
+        // Ensure grounded before setting destination
+        if (!TryWarpToNavMesh() || !agent.enabled) 
+        { 
+            Debug.LogWarning("[HeroNavigation] StartMoving failed: Not grounded or agent disabled.");
+            isMoving = false; 
+            return; 
+        }
+
+        if (!agent.isOnNavMesh)
+        {
+            Debug.LogError("[HeroNavigation] FATAL: Agent says it is NOT on NavMesh despite warp. Destination setting will fail.");
+            isMoving = false;
+            return;
+        }
 
         RefreshPathDistanceToTarget();
 
         float stopDist = arrivalDistance;
         CharacterStats enemyStats = currentTarget.GetComponentInChildren<CharacterStats>();
         if (enemyStats != null && (enemyStats.name.Contains("Chest") || enemyStats.name.Contains("TreasureChest")))
-            stopDist = 2.5f;
+            stopDist = 2.5f; // Forgiving distance for chests
         agent.stoppingDistance = stopDist;
 
         if (animator != null)
@@ -431,12 +521,22 @@ public class HeroNavigation : MonoBehaviour
             animator.ResetTrigger("Victory");
             animator.ResetTrigger("Attack");
             animator.ResetTrigger("GetHit");
+            animator.CrossFade("Locomotion", 0.2f);
+            animator.SafeSetFloat("Speed", 0f);
         }
 
         agent.isStopped = false;
-        agent.SetDestination(currentTarget.position);
+        if (!agent.SetDestination(currentTarget.position))
+        {
+            Debug.LogWarning($"[HeroNavigation] agent.SetDestination to {currentTarget.name} at {currentTarget.position} FAILED. Re-calculating path...");
+            // Force a slight nudge and retry next frame
+            isMoving = false;
+            return;
+        }
+
         isMoving = true;
         lastPosition = transform.position;
+        stuckTimer = 0f;
     }
 
     private bool TryBuildPath(Vector3 targetPos, out NavMeshPath path, out float pathLen)
@@ -464,6 +564,12 @@ public class HeroNavigation : MonoBehaviour
 
     public bool EnsureOnNavMesh(float maxDistance = 10f) => TryWarpToNavMesh(maxDistance);
 
+    public void ClearTarget()
+    {
+        currentTarget = null;
+        pathDistanceToTarget = 0f;
+    }
+
     public void StopMoving(string reason)
     {
         isMoving = false;
@@ -471,26 +577,31 @@ public class HeroNavigation : MonoBehaviour
         {
             agent.isStopped = true;
             agent.velocity = Vector3.zero;
+            agent.ResetPath();
         }
         remainingMeters = Mathf.Max(0, remainingMeters);
+        UpdateAnimation(0f);
     }
 
     public void ResumeAfterCombat(string completedTargetName = null)
     {
-        if (stats.isDead) return;
+        if (stats.isDead || tutorialTransitionFlag) return;
 
-        // Notify FTUE if a target was completed (usually passed from chests after loot)
+        // Clear current target to force a fresh search/next tutorial step
+        currentTarget = null;
+
+        // Notify FTUE if a target was completed
         if (!string.IsNullOrEmpty(completedTargetName) && FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
         {
             FTUEManager.Instance.OnStageCompleted(completedTargetName);
         }
 
         EnsureComponents();
-        TryWarpToNavMesh();
+        TryWarpToNavMesh(10f); // More aggressive grounding
         
         if (remainingMeters > 0.1f)
         {
-            if (currentTarget == null) SelectNextPOI();
+            SelectNextPOI();
             if (currentTarget != null) StartMoving();
             else StopMoving("Post-Combat Idle (No Target)");
         }

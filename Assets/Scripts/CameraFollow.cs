@@ -18,9 +18,10 @@ public class CameraFollow : MonoBehaviour
     public float pitch = 20.0f;
     public float yaw = 0.0f;
     public float smoothSpeed = 0.125f;
+    public float rotationSmoothSpeed = 0.2f;
 
     [Header("Combat Polish")]
-    public bool isCombatOrbiting = false;
+public bool isCombatOrbiting = false;
     public float orbitSpeed = 40f; // Faster spin
     private float combatOrbitYaw = 0f;
 
@@ -37,7 +38,13 @@ public class CameraFollow : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (target == null) return;
+        if (target == null) 
+        {
+            // Auto-fallback to Steve if target is lost or destroyed
+            GameObject steve = GameObject.Find("Steve") ?? GameObject.Find("Player");
+            if (steve != null) target = steve.transform;
+            else return;
+        }
 
         // Handle Shake
         if (shakeDuration > 0)
@@ -54,21 +61,21 @@ public class CameraFollow : MonoBehaviour
 
         // Calculate rotation based on preset
         Quaternion targetRotation;
-        if (isCombatOrbiting && preset == CameraPreset.GodOfWar)
+        if (isCombatOrbiting)
         {
             combatOrbitYaw += orbitSpeed * Time.deltaTime;
-            // Tilt down more for combat showcase (pitch + 15)
-            targetRotation = Quaternion.Euler(pitch + 15f, target.eulerAngles.y + combatOrbitYaw, 0);
+            // Add a fixed pitch for combat showcase
+            targetRotation = Quaternion.Euler(pitch + 10f, yaw + combatOrbitYaw, 0);
         }
         else if (preset == CameraPreset.GodOfWar)
         {
-            combatOrbitYaw = yaw; // Reset orbit offset
-            // For GoW, follow the target's yaw but keep fixed pitch
+            combatOrbitYaw = 0; 
+            // Follow target's rotation on Y axis
             targetRotation = Quaternion.Euler(pitch, target.eulerAngles.y + yaw, 0);
         }
         else
         {
-            // For Diablo/Custom, use fixed world rotation
+            // Diablo/Custom: Fixed world rotation
             targetRotation = Quaternion.Euler(pitch, yaw, 0);
         }
         
@@ -78,12 +85,27 @@ public class CameraFollow : MonoBehaviour
         
         // Smoothly move the camera
         float t = 1.0f - Mathf.Exp(-smoothSpeed * Time.deltaTime * 10f);
+        if (!Application.isPlaying) t = 1f;
+
         transform.position = Vector3.Lerp(transform.position, desiredPosition, t) + shakeOffset;
         
-        // Always look at the target
-        Vector3 targetLookPos = target.position + Vector3.up * 1.5f;
-        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(targetLookPos - transform.position), t);
+        // Look at target with vertical offset
+        Vector3 lookTarget = target.position + Vector3.up * 1.2f;
+        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookTarget - transform.position), t);
+    }
+
+    public void SetTarget(Transform newTarget, bool instant = false)
+    {
+        target = newTarget;
+        if (instant)
+        {
+            ApplyPresets();
+            Quaternion targetRotation = Quaternion.Euler(pitch, yaw, 0);
+            Vector3 offset = targetRotation * new Vector3(0, 0, -distance);
+            transform.position = target.position + offset;
+            transform.LookAt(target.position + Vector3.up * 1.2f);
         }
+    }
 
     private void ApplyPresets()
     {
