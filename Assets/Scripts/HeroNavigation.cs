@@ -123,12 +123,30 @@ public class HeroNavigation : MonoBehaviour
         if (GameSettings.Instance != null)
             metersPerDicePoint = GameSettings.Instance.metersPerDicePoint;
 
+        // Warp to spawn point if available
+        PlayerStart spawn = Object.FindAnyObjectByType<PlayerStart>();
+        if (spawn != null)
+        {
+            // Disable agent briefly to warp
+            if (agent != null) agent.enabled = false;
+            transform.position = spawn.transform.position;
+            transform.rotation = spawn.transform.rotation;
+            if (agent != null) agent.enabled = true;
+            
+            Debug.Log($"[HeroNavigation] Warped Steve to spawn point: {spawn.name} at {spawn.transform.position}");
+        }
+        else
+        {
+            Debug.LogWarning("[HeroNavigation] No PlayerStart found in scene.");
+        }
+
         if (agent != null)
         {
             agent.autoBraking = true;
             agent.stoppingDistance = arrivalDistance;
             agent.acceleration = 25f;
             agent.angularSpeed = 600f;
+            TryWarpToNavMesh();
         }
         if (animator != null) animator.applyRootMotion = false;
         if (poiRoot != null) ResetPOIs();
@@ -189,6 +207,8 @@ public class HeroNavigation : MonoBehaviour
         if (stats.isDead) return;
 
         rollsCount++;
+        if (POIManager.Instance != null) POIManager.Instance.OnTurnPassed();
+
         if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat)
         {
             CombatSystem.Instance.OnPlayerRoll(totalValue);
@@ -207,10 +227,11 @@ public class HeroNavigation : MonoBehaviour
         if (currentTarget != null && agent != null && TryWarpToNavMesh())
         {
             if (!spawnedCoinsForCurrentTarget)
-                StartCoroutine(SpawnCoinsCoroutine());
+                StartMoving(); // No coins for now to keep it clean, or start coroutine
             StartMoving();
         }
     }
+
 
     private IEnumerator SpawnCoinsCoroutine()
     {
@@ -296,6 +317,17 @@ public class HeroNavigation : MonoBehaviour
         spawnedCoinsForCurrentTarget = false;
         ResetPOIs();
 
+        // Check FTUE first
+        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        {
+            currentTarget = FTUEManager.Instance.GetNextTarget(transform.position);
+            if (currentTarget != null)
+            {
+                RefreshPathDistanceToTarget();
+                return;
+            }
+        }
+
         if (availablePOIs.Count == 0)
         {
             currentTarget = null;
@@ -303,25 +335,7 @@ public class HeroNavigation : MonoBehaviour
             return;
         }
 
-        int index = -1;
-
-        // FTUE: first three rolls always head for a treasure chest
-        if (rollsCount <= 3)
-        {
-            for (int i = 0; i < availablePOIs.Count; i++)
-            {
-                PointOfInterest poi = availablePOIs[i].GetComponent<PointOfInterest>();
-                if (poi != null && poi.enemyType == EnemyType.TreasureChest)
-                {
-                    index = i;
-                    break;
-                }
-            }
-        }
-
-        if (index == -1)
-            index = Random.Range(0, availablePOIs.Count);
-
+        int index = Random.Range(0, availablePOIs.Count);
         currentTarget = availablePOIs[index];
         RefreshPathDistanceToTarget();
     }
@@ -403,6 +417,11 @@ public class HeroNavigation : MonoBehaviour
     public void ResumeAfterCombat()
     {
         if (stats.isDead) return;
+
+        // Notify FTUE if target was killed in proper combat
+        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+            FTUEManager.Instance.OnStageCompleted();
+
         EnsureComponents();
         TryWarpToNavMesh();
         if (remainingMeters > 0.1f && currentTarget != null)
@@ -440,20 +459,7 @@ public class HeroNavigation : MonoBehaviour
 
                 if (enemyStats.isDead)
                 {
-                    if (animator != null) animator.SafeSetTrigger("Victory");
-                    Animator enemyAnim = enemyStats.GetComponent<Animator>();
-                    bool isDragon = enemyStats.name.Contains("DragonBob");
-                    if (enemyAnim != null) { if (isDragon) enemyAnim.CrossFade("Die", 0.1f); else enemyAnim.SafeSetTrigger("Die"); }
-
-                    if (enemyStats.name.Contains("Chest")) stats.AddGold(Random.Range(20, 51));
-                    else if (isDragon) stats.AddGold(Random.Range(100, 201));
-                    else stats.AddGold(Random.Range(5, 11));
-
-                    GameObject.Destroy(enemyStats.gameObject, isDragon ? 3f : 2f);
-                    StopMoving("Enemy Defeated");
-                    if (enemyStats.name.Contains("Chest") && CombatSystem.Instance != null)
-                        CombatSystem.Instance.ShowChestUpgradePopup();
-                    currentTarget = null;
+                    HandleDefeatedTarget(enemyStats);
                     return;
                 }
             }
@@ -474,6 +480,30 @@ public class HeroNavigation : MonoBehaviour
         {
             StopMoving("Target Reached");
         }
+    }
+
+    private void HandleDefeatedTarget(CharacterStats enemyStats)
+    {
+        if (animator != null) animator.SafeSetTrigger("Victory");
+        Animator enemyAnim = enemyStats.GetComponent<Animator>();
+        bool isDragon = enemyStats.name.Contains("DragonBob");
+        if (enemyAnim != null) { if (isDragon) enemyAnim.CrossFade("Die", 0.1f); else enemyAnim.SafeSetTrigger("Die"); }
+
+        if (enemyStats.name.Contains("Chest")) stats.AddGold(Random.Range(20, 51));
+        else if (isDragon) stats.AddGold(Random.Range(100, 201));
+        else stats.AddGold(Random.Range(5, 11));
+
+        GameObject.Destroy(enemyStats.gameObject, isDragon ? 3f : 2f);
+        StopMoving("Enemy Defeated");
+
+        // Notify FTUE
+        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+            FTUEManager.Instance.OnStageCompleted();
+
+        if (enemyStats.name.Contains("Chest") && CombatSystem.Instance != null)
+            CombatSystem.Instance.ShowChestUpgradePopup();
+        
+        currentTarget = null;
     }
 
     private void ResetPOIs()
