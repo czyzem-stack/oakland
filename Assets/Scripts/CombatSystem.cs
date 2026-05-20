@@ -20,8 +20,13 @@ public class CombatSystem : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        isInCombat = false;
+        isPlayerTurn = false;
+        isAttackSequenceRunning = false;
+        currentEnemyStats = null;
+
         // Try to find a default TMP font
-        damageFont = Resources.Load<TMP_FontAsset>("Fonts/Alata-Regular SDF");
+damageFont = Resources.Load<TMP_FontAsset>("Fonts/Alata-Regular SDF");
         if (damageFont == null) damageFont = Resources.Load<TMP_FontAsset>("LiberationSans SDF");
         
         if (hitEffectPrefab == null)

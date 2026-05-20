@@ -257,12 +257,6 @@ public int wit = 10;
         bool isPlayer = GetComponent<EquipmentManager>() != null;
         bool isFTUE = (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive);
 
-        // Stage FTUE: Steve takes 90% less damage during the tutorial
-        if (isPlayer && isFTUE)
-        {
-            amount *= 0.1f;
-        }
-
         // Apply defense reduction
         float reducedAmount = Mathf.Max(1, amount - Defense);
         
@@ -271,6 +265,14 @@ public int wit = 10;
         currentStamina = Mathf.Max(0, currentStamina - reducedAmount);
         currentHP -= reducedAmount;
         
+        // FTUE Plot Armor: Steve cannot die during the tutorial, clamp to 1 HP
+        if (currentHP <= 0 && isFTUE && isPlayer)
+        {
+            currentHP = 1;
+            CombatSystem.Instance?.SpawnDamageText(transform.position + Vector3.up * 2.5f, "STAYING ALIVE!", Color.green);
+            return;
+        }
+
         // Second Wind / FTUE Plot Armor: Only trigger if the manual setting is ON
         HeroSettings settings = GetComponent<HeroSettings>();
         bool secondWindEnabled = settings != null && settings.secondWind;

@@ -489,18 +489,20 @@ public class HeroNavigation : MonoBehaviour
         bool isDragon = enemyStats.name.Contains("DragonBob");
         if (enemyAnim != null) { if (isDragon) enemyAnim.CrossFade("Die", 0.1f); else enemyAnim.SafeSetTrigger("Die"); }
 
-        if (enemyStats.name.Contains("Chest")) stats.AddGold(Random.Range(20, 51));
+        bool isChest = enemyStats.name.Contains("Chest") || enemyStats.name.Contains("TreasureChest");
+
+        if (isChest) stats.AddGold(Random.Range(20, 51));
         else if (isDragon) stats.AddGold(Random.Range(100, 201));
         else stats.AddGold(Random.Range(5, 11));
 
         GameObject.Destroy(enemyStats.gameObject, isDragon ? 3f : 2f);
         StopMoving("Enemy Defeated");
 
-        // Notify FTUE
-        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        // Notify FTUE for NON-CHESTS here. Chests advance in ResumeAfterChest/Combat.
+        if (!isChest && FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
             FTUEManager.Instance.OnStageCompleted();
 
-        if (enemyStats.name.Contains("Chest") && CombatSystem.Instance != null)
+        if (isChest && CombatSystem.Instance != null)
             CombatSystem.Instance.ShowChestUpgradePopup();
         
         currentTarget = null;

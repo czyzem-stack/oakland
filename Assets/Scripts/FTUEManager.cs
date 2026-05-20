@@ -4,11 +4,11 @@ public enum FTUEStage
 {
     Orc1,
     Chest1,
-    Mushroom,
     Orc2,
+    Mushroom,
     Chest2,
-    Worm,
     Orc3,
+    Worm,
     Chest3,
     Completed
 }
@@ -20,45 +20,72 @@ public class FTUEManager : MonoBehaviour
     public FTUEStage currentStage = FTUEStage.Orc1;
     public bool isFTUEActive = true;
 
-    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v4"; 
+    private const string FTUE_COMPLETED_KEY = "FTUE_Completed_v5"; 
 
     void Awake()
     {
         Instance = this;
+        // Use a unique key for the current structure to force a reset for the user
         if (PlayerPrefs.GetInt(FTUE_COMPLETED_KEY, 0) == 1)
         {
             isFTUEActive = false;
             currentStage = FTUEStage.Completed;
         }
+
+        if (isFTUEActive)
+        {
+            Debug.Log("[FTUE] Active. Starting Stage: " + currentStage);
+            // Suppress all existing POIs in the scene immediately
+            SuppressAllScenePOIs();
+        }
+    }
+
+    private void SuppressAllScenePOIs()
+    {
+        PointOfInterest[] all = Object.FindObjectsByType<PointOfInterest>(FindObjectsInactive.Include);
+        foreach (var poi in all)
+        {
+            // If it doesn't have our tutorial prefix, kill it
+            if (!poi.name.Contains("FTUE") && !poi.name.Contains("Forced"))
+            {
+                poi.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    private void Start()
+    {
+        if (isFTUEActive) SuppressAllScenePOIs();
     }
 
     public void OnStageCompleted()
     {
         if (!isFTUEActive) return;
 
+        FTUEStage next = currentStage;
         switch (currentStage)
         {
             case FTUEStage.Orc1: 
                 var stats = CombatSystem.Instance?.playerStats;
                 if (stats != null && stats.level == 1) stats.AddXP(stats.MaxXP);
-                currentStage = FTUEStage.Chest1; 
+                next = FTUEStage.Chest1; 
                 break;
-            case FTUEStage.Chest1: currentStage = FTUEStage.Orc2; break;
-            case FTUEStage.Orc2: currentStage = FTUEStage.Mushroom; break;
-            case FTUEStage.Mushroom: currentStage = FTUEStage.Chest2; break;
-            case FTUEStage.Chest2: currentStage = FTUEStage.Orc3; break;
-            case FTUEStage.Orc3: currentStage = FTUEStage.Worm; break;
-            case FTUEStage.Worm: currentStage = FTUEStage.Chest3; break;
+            case FTUEStage.Chest1: next = FTUEStage.Orc2; break;
+            case FTUEStage.Orc2: next = FTUEStage.Mushroom; break;
+            case FTUEStage.Mushroom: next = FTUEStage.Chest2; break;
+            case FTUEStage.Chest2: next = FTUEStage.Orc3; break;
+            case FTUEStage.Orc3: next = FTUEStage.Worm; break;
+            case FTUEStage.Worm: next = FTUEStage.Chest3; break;
             case FTUEStage.Chest3: 
-                currentStage = FTUEStage.Completed; 
+                next = FTUEStage.Completed; 
                 isFTUEActive = false;
                 PlayerPrefs.SetInt(FTUE_COMPLETED_KEY, 1);
                 PlayerPrefs.Save();
-                // Enable global POIs
                 if (POIManager.Instance != null) POIManager.Instance.SetupPOIs();
                 break;
         }
         
+        currentStage = next;
         Debug.Log($"[FTUE] Advanced to {currentStage}");
     }
 
@@ -109,4 +136,3 @@ public class PlayerStart : MonoBehaviour
         Gizmos.DrawLine(transform.position, transform.position + transform.forward * 2f);
     }
 }
-

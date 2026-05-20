@@ -52,6 +52,12 @@ public class POIManager : MonoBehaviour
     {
         if (poiRoot == null) poiRoot = transform;
         SetupPOIs();
+
+        // Extra aggressive cleanup for FTUE
+        if (FTUEManager.Instance != null && FTUEManager.Instance.isFTUEActive)
+        {
+            DeactivateAllPOIs();
+        }
     }
 
     void Update()

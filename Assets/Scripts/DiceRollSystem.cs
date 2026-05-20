@@ -155,19 +155,31 @@ private List<Rigidbody> activeDiceRBs = new List<Rigidbody>();
         }
     }
 
+    private void Awake()
+    {
+        isRolling = false;
+        // The static autoRoll might be the problem if it was true and stayed true? 
+        // No, autoRoll is an instance variable.
+    }
+
     public bool CanRoll
     {
         get
         {
-            if (isRolling || IsSteveBusy() || GenericPopup.IsOpen) return false;
+            if (isRolling) { Debug.Log("[DiceRollSystem] Cannot roll: isRolling is true"); return false; }
+            if (IsSteveBusy()) { Debug.Log("[DiceRollSystem] Cannot roll: Steve is busy (moving or combat turn)"); return false; }
+            if (GenericPopup.IsOpen) { Debug.Log("[DiceRollSystem] Cannot roll: GenericPopup is open"); return false; }
+            if (EquipmentLootPopup.IsOpen) { Debug.Log("[DiceRollSystem] Cannot roll: EquipmentLootPopup is open"); return false; }
 
             if (cachedStats == null) RefreshReferences();
-            if (cachedStats == null || cachedStats.isDead) return false;
+            if (cachedStats == null || cachedStats.isDead) { Debug.Log("[DiceRollSystem] Cannot roll: Steve is dead or stats missing"); return false; }
 
             // In combat, we can always roll (safety net for soft-locks)
             if (CombatSystem.Instance != null && CombatSystem.Instance.isInCombat) return true;
 
-            return cachedStats.currentMana >= 1;
+            bool hasMana = cachedStats.currentMana >= 1;
+            if (!hasMana) Debug.Log("[DiceRollSystem] Cannot roll: Low energy");
+            return hasMana;
         }
     }
 
